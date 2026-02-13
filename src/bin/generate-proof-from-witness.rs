@@ -15,7 +15,7 @@
 //!   "public_signals": ["0x01...", "0x02...", ...]
 //! }
 
-use orbinum_groth16_proofs::generate_proof_from_witness;
+use groth16_proofs::generate_proof_from_witness;
 use serde::{Deserialize, Serialize};
 use std::env;
 
