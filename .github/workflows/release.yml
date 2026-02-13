@@ -30,7 +30,7 @@ jobs:
                   cache-directories: target
 
             - name: Install wasm-pack
-              run: curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh
+              run: cargo install wasm-pack
 
             - name: Install cargo-release
               run: cargo install cargo-release
