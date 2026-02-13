@@ -17,11 +17,6 @@ Efficient **Groth16 zero-knowledge proof generator** for Orbinum's privacy proto
 groth16-proofs = "0.1"
 ```
 
-**JavaScript/npm**:
-```bash
-npm install groth16-proofs
-```
-
 ### Use
 
 **Rust**:
@@ -112,11 +107,9 @@ See [Makefile](./Makefile) for all available targets.
 
 ## Documentation
 
-- 📖 [**Installation Guide**](./docs/installation.md) - Setup for Rust and JavaScript
-- 📖 [**Usage Guide**](./docs/usage.md) - Complete API reference with examples
-- 🔧 [**Development Guide**](./DEVELOPMENT.md) - CI/CD setup and secrets
-- 🚀 [**Release Process**](./docs/release.md) - How releases are managed
-- 🤝 [**Contributing**](./CONTRIBUTING.md) - How to contribute
+- [**Installation Guide**](./docs/installation.md) - Setup for Rust and JavaScript
+- [**Usage Guide**](./docs/usage.md) - Complete API reference with examples
+- [**Release Process**](./docs/release.md) - How releases are managed
 
 ## Performance
 
