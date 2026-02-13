@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0](https://github.com/orbinum/groth16-proofs/releases/tag/v1.0.0):  2026-02-12
+## [1.0.0](https://github.com/orbinum/groth16-proofs/releases/tag/v1.0.0) - 2026-02-12
 
 ### Changed
 - **BREAKING**: `generate_proof_wasm()` now accepts `num_public_signals: usize` instead of `circuit_type: &str`
