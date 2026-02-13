@@ -1,6 +1,6 @@
 # Usage Guide
 
-Complete API reference and usage examples for `orbinum-groth16-proofs`.
+Complete API reference and usage examples for `groth16-proofs`.
 
 ## Overview
 
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ... 11,806 more elements
     ];
     
-    let proof = generate_proof_from_witness(&witness, "circuits/unshield_pk.ark")?;
+    let proof = generate_proof_from_witness(&witness, "circuits/my_circuit_pk.ark")?;
     println!("Proof: 0x{}", hex::encode(&proof));
     
     Ok(())
@@ -84,14 +84,14 @@ let field_element = hex_to_field("0x0123456789abcdef")?;
 
 ## WASM JavaScript API
 
-### `generateProofWasm()`
+### `generate_proof_wasm()`
 
 Browser-compatible proof generation.
 
 **Signature**:
 ```typescript
-function generateProofWasm(
-    circuitType: string,         // "unshield" | "transfer" | "disclosure"
+function generate_proof_wasm(
+    numPublicSignals: number,    // Number of public signals to extract (e.g., 5, 4, etc.)
     witnessJson: string,         // JSON array as string
     provingKeyBytes: Uint8Array  // Binary proving key
 ): string                        // JSON output
@@ -101,7 +101,7 @@ function generateProofWasm(
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `circuitType` | string | Circuit identifier: `"unshield"`, `"transfer"`, or `"disclosure"` |
+| `numPublicSignals` | number | Number of public signals to extract from witness |
 | `witnessJson` | string | JSON string: `'["0x...", "0x...", ...]'` |
 | `provingKeyBytes` | Uint8Array | Binary proving key (from `.ark` file) |
 
@@ -109,18 +109,21 @@ function generateProofWasm(
 ```json
 {
   "proof": "0x...",                         // 128-byte compressed Groth16 proof
-  "publicSignals": ["0x...", "0x...", ...]  // Circuit-specific signals
+  "publicSignals": ["0x...", "0x...", ...]  // Public signals from witness
 }
 ```
 
-**Public Signals Count**:
-- `"unshield"`: 5 signals
-- `"transfer"`: 5 signals
-- `"disclosure"`: 4 signals
+**How to determine `numPublicSignals`**:
+
+The number of public signals depends on your specific circuit implementation. Check your circuit definition to know how many signals are public. Common examples:
+- Simple circuits: 1-5 signals
+- Privacy protocols: 4-8 signals
+- Complex applications: 10+ signals
 
 **Example (Browser)**:
 ```typescript
-import { generateProofWasm } from 'orbinum-groth16-proofs';
+// Import from downloaded WASM module
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
 
 async function generateProof() {
   // Prepare witness
@@ -130,13 +133,15 @@ async function generateProof() {
   ];
   
   // Load proving key
-  const response = await fetch('proving_keys/unshield.ark');
+  const response = await fetch('proving_keys/my_circuit.ark');
   const provingKeyBytes = new Uint8Array(await response.arrayBuffer());
   
-  // Generate proof
+  // Specify number of public signals for your circuit
+  const numPublicSignals = 5; // Adjust based on your circuit
+  
   try {
-    const resultJson = generateProofWasm(
-      'unshield',
+    const resultJson = generate_proof_wasm(
+      numPublicSignals,
       JSON.stringify(witness),
       provingKeyBytes
     );
@@ -156,16 +161,20 @@ async function generateProof() {
 
 **Example (Node.js)**:
 ```typescript
-import { generateProofWasm } from 'orbinum-groth16-proofs';
+// Import from downloaded WASM module
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
 import fs from 'fs';
 import path from 'path';
 
 function generateProofFromFile() {
   const witness = JSON.parse(fs.readFileSync('witness.json', 'utf-8'));
-  const provingKey = fs.readFileSync('circuits/unshield_pk.ark');
+  const provingKey = fs.readFileSync('circuits/my_circuit_pk.ark');
   
-  const result = generateProofWasm(
-    'unshield',
+  // Adjust based on your circuit's public signals
+  const numPublicSignals = 5;
+  
+  const result = generate_proof_wasm(
+    numPublicSignals,
     JSON.stringify(witness),
     new Uint8Array(provingKey)
   );
@@ -186,42 +195,92 @@ Initialize panic handling for better browser error messages. Usually called auto
 function initPanicHook(): void
 ```
 
-**When called**: Automatically via `#[wasm_bindgen(start)]` in browser environment.
+## Complete Examples
 
-## Circuit Types
+### Rust Example
 
-### Unshield Circuit
+```rust
+use orbinum_groth16_proofs::generate_proof_from_witness;
 
-**Public Signals**: 5
-- Signal 0: Amount
-- Signal 1-4: [Specific to unshield logic]
-
-**Use case**: Privacy-preserving fund withdrawal
-
-```typescript
-generateProofWasm('unshield', witnessJson, provingKeyBytes)
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Prepare witness (hex-encoded field elements)
+    let witness = vec![
+        "0x0100000000000000000000000000000000000000000000000000000000000000".to_string(),
+        "0x0200000000000000000000000000000000000000000000000000000000000000".to_string(),
+        // ... more elements (typically ~11,808 total)
+    ];
+    
+    // Generate proof
+    let proof_bytes = generate_proof_from_witness(&witness, "circuits/my_circuit_pk.ark")?;
+    
+    println!("Proof (128 bytes): 0x{}", hex::encode(&proof_bytes));
+    Ok(())
+}
 ```
 
-### Transfer Circuit
-
-**Public Signals**: 5
-- Similar structure to unshield
-
-**Use case**: Private value transfer
+### Browser Example
 
 ```typescript
-generateProofWasm('transfer', witnessJson, provingKeyBytes)
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
+
+async function generateProof() {
+  // Load witness data
+  const witness = [
+    "0x0100000000000000000000000000000000000000000000000000000000000000",
+    "0x0200000000000000000000000000000000000000000000000000000000000000",
+    // ... more elements
+  ];
+  
+  // Load proving key
+  const response = await fetch('proving_keys/my_circuit.ark');
+  const provingKeyBytes = new Uint8Array(await response.arrayBuffer());
+  
+  // Specify number of public signals for your circuit
+  const numPublicSignals = 5; // Depends on your circuit definition
+  
+  try {
+    const resultJson = generate_proof_wasm(
+      numPublicSignals,
+      JSON.stringify(witness),
+      provingKeyBytes
+    );
+    
+    const { proof, publicSignals } = JSON.parse(resultJson);
+    console.log('✓ Proof:', proof);
+    console.log('✓ Public signals:', publicSignals);
+    
+    return { proof, publicSignals };
+  } catch (error) {
+    console.error('✗ Generation failed:', error);
+    throw error;
+  }
+}
 ```
 
-### Disclosure Circuit
-
-**Public Signals**: 4
-- Proof of value ownership without revealing details
-
-**Use case**: Selective information disclosure
+### Node.js Example
 
 ```typescript
-generateProofWasm('disclosure', witnessJson, provingKeyBytes)
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
+import fs from 'fs';
+
+function generateProofFromFile(circuitName: string, witnessPath: string) {
+  // Load witness and proving key
+  const witness = JSON.parse(fs.readFileSync(witnessPath, 'utf-8'));
+  const provingKey = fs.readFileSync(`circuits/${circuitName}_pk.ark`);
+  
+  // Configure based on your circuit
+  // You need to know how many public signals your circuit has
+  const numPublicSignals = 5;
+  
+  const result = generate_proof_wasm(
+    numPublicSignals,
+    JSON.stringify(witness),
+    new Uint8Array(provingKey)
+  );
+  
+  const { proof, publicSignals } = JSON.parse(result);
+  return { proof, publicSignals };
+}
 ```
 
 ## Data Format
@@ -277,7 +336,8 @@ match generate_proof_from_witness(&witness, "key.ark") {
 
 ```typescript
 try {
-  const result = generateProofWasm('unshield', witnessJson, keyBytes);
+  const numPublicSignals = 5; // Adjust for your circuit
+  const result = generate_proof_wasm(numPublicSignals, witnessJson, keyBytes);
   const { proof, publicSignals } = JSON.parse(result);
 } catch (error) {
   console.error('Error:', error.message);
@@ -288,7 +348,8 @@ try {
 **Common Errors**:
 - `"Failed to parse witness JSON: ..."`
 - `"Failed to deserialize proving key: ..."`
-- `"Unknown circuit type: ..."`
+- `"num_public_signals must be greater than 0"`
+- `"num_public_signals exceeds witness length"`
 
 ## Proving Key Management
 
@@ -299,9 +360,9 @@ Store proving keys in a secure location:
 ```
 project/
 ├── circuits/
-│   ├── unshield_pk.ark
-│   ├── transfer_pk.ark
-│   └── disclosure_pk.ark
+│   ├── my_circuit_v1_pk.ark
+│   ├── my_circuit_v2_pk.ark
+│   └── another_circuit_pk.ark
 └── src/
 ```
 
@@ -312,17 +373,25 @@ In browser environments, cache proving keys to avoid re-downloading:
 ```typescript
 let cachedProofingKey: Uint8Array | null = null;
 
-async function loadProvingKey(circuitType: string) {
+async function loadProvingKey(circuitName: string) {
   if (!cachedProofingKey) {
-    const response = await fetch(`/proving_keys/${circuitType}.ark`);
+    const response = await fetch(`/proving_keys/${circuitName}.ark`);
     cachedProofingKey = new Uint8Array(await response.arrayBuffer());
   }
   return cachedProofingKey;
 }
 
-async function generateProofCached(circuitType: string, witness: string[]) {
-  const provingKey = await loadProvingKey(circuitType);
-  return generateProofWasm(circuitType, JSON.stringify(witness), provingKey);
+// Configuration for your circuits
+const CIRCUIT_CONFIG = {
+  'my_circuit_v1': { publicSignals: 5 },
+  'my_circuit_v2': { publicSignals: 7 },
+  'simple_circuit': { publicSignals: 3 },
+};
+
+async function generateProofCached(circuitName: string, witness: string[]) {
+  const provingKey = await loadProvingKey(circuitName);
+  const { publicSignals } = CIRCUIT_CONFIG[circuitName];
+  return generate_proof_wasm(publicSignals, JSON.stringify(witness), provingKey);
 }
 ```
 
@@ -374,7 +443,7 @@ class ProofQueue {
   async process() {
     while (this.queue.length > 0) {
       const task = this.queue.shift();
-      const result = generateProofWasm(...);
+      const result = generate_proof_wasm(numPublicSignals, witnessJson, provingKeyBytes);
       // ...
     }
   }
@@ -409,7 +478,8 @@ println!("Proof bytes: {}", hex::encode(&proof_bytes));
 ```typescript
 // In TypeScript
 console.log('Witness JSON:', witnessJson);
-const result = generateProofWasm(...);
+const result = generate_proof_wasm(numPublicSignals, witnessJson, provingKeyBytes);
+console.log('Result:', result);
 console.log('Result:', result);
 ```
 
