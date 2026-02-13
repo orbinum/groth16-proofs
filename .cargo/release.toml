@@ -1,10 +1,18 @@
 [release]
-update-crates-io = true
-consolidate-pushes = true
-pre-release-commit-message = "chore(release): {{version}}\n\n[skip ci]"
+# Publish to crates.io (disabled here, done manually in CI after WASM build)
+publish = false
+# Don't push automatically (CI will push after updating CHANGELOG)
+push = false
+# Consolidate commits
+consolidate-commits = true
+# Custom commit message
+pre-release-commit-message = "chore(release): {{version}}"
+# Tag configuration
 tag-message = "Release {{version}}"
 tag-name = "v{{version}}"
+# IMPORTANT: Automatically update CHANGELOG.md
 changelog-update = true
+# Build WASM before release (as a pre-release hook)
 pre-release-hook = [
     { cmd = "wasm-pack", args = [
         "build",
@@ -17,4 +25,5 @@ pre-release-hook = [
         "wasm",
     ] },
 ]
+# Only allow releases from main branch
 allow-branch = ["main"]
