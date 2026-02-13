@@ -43,7 +43,7 @@ fn main() {
         eprintln!("\nnum_public_signals can be specified either:");
         eprintln!("  1. In witness.json as 'num_public_signals' field");
         eprintln!("  2. As 3rd CLI argument");
-        eprintln!("  3. Defaults: unshield=5, transfer=5, disclosure=4");
+        eprintln!("  3. Defaults to 5 if not specified");
         std::process::exit(1);
     }
 
