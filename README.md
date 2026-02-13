@@ -28,9 +28,10 @@ let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 
 **JavaScript (Browser/Node.js)**:
 ```typescript
-import { generateProofWasm } from 'groth16-proofs';
+// Import from downloaded WASM module (see releases)
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
 
-const result = generateProofWasm('unshield', witnessJson, provingKeyBytes);
+const result = generate_proof_wasm(5, witnessJson, provingKeyBytes); // 5 = number of public signals
 ```
 
 📖 **Full guides**: See [Installation](./docs/installation.md) and [Usage](./docs/usage.md)
@@ -48,7 +49,7 @@ This crate generates **128-byte compressed Groth16 proofs** from witness data us
 
 ```
 ┌────────────────────────────────────────────────┐
-│ orbinum-groth16-proofs                         │
+│ groth16-proofs                                 │
 ├────────────────────────────────────────────────┤
 │                                                │
 │  ┌──────────────────────────────────────────┐  │

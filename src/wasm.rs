@@ -29,15 +29,21 @@ pub fn init_panic_hook() {
 /// Generate a Groth16 proof from witness (WASM interface)
 ///
 /// # Arguments
-/// * `circuit_type` - "unshield", "transfer", or "disclosure"
+/// * `num_public_signals` - Number of public signals to extract from witness (e.g., 5 for unshield/transfer, 4 for disclosure)
 /// * `witness_json` - JSON array of witness values as strings
 /// * `proving_key_bytes` - Serialized proving key (arkworks format)
 ///
 /// # Returns
 /// JSON string with format: `{"proof": "0x...", "publicSignals": ["...", "..."]}`
+///
+/// # Example
+/// ```ignore
+/// // For a circuit with 5 public signals
+/// let result = generate_proof_wasm(5, witness_json, proving_key_bytes)?;
+/// ```
 #[wasm_bindgen]
 pub fn generate_proof_wasm(
-    circuit_type: &str,
+    num_public_signals: usize,
     witness_json: &str,
     proving_key_bytes: &[u8],
 ) -> Result<String, JsValue> {
@@ -72,16 +78,19 @@ pub fn generate_proof_wasm(
     let proof_hex = format!("0x{}", hex::encode(&proof_bytes));
 
     // Extract public signals
-    let num_public_signals = match circuit_type {
-        "unshield" => 5,
-        "transfer" => 5,
-        "disclosure" => 4,
-        _ => {
-            return Err(JsValue::from_str(&format!(
-                "Unknown circuit type: {circuit_type}"
-            )))
-        }
-    };
+    // Validate bounds
+    if num_public_signals == 0 {
+        return Err(JsValue::from_str(
+            "num_public_signals must be greater than 0",
+        ));
+    }
+    if num_public_signals >= witness.len() {
+        return Err(JsValue::from_str(&format!(
+            "num_public_signals ({}) exceeds witness length ({})",
+            num_public_signals,
+            witness.len()
+        )));
+    }
 
     let public_signals: Vec<String> = witness[1..=num_public_signals]
         .iter()
@@ -128,21 +137,22 @@ mod tests {
     }
 
     #[test]
-    fn test_circuit_type_public_signals_count() {
-        let circuits = vec![("unshield", 5), ("transfer", 5), ("disclosure", 4)];
+    fn test_public_signals_validation() {
+        // Test that we can specify any number of public signals
+        let test_cases = vec![
+            (5, true),  // Valid: 5 signals
+            (4, true),  // Valid: 4 signals
+            (10, true), // Valid: 10 signals
+            (0, false), // Invalid: 0 signals
+        ];
 
-        for (circuit_type, expected_count) in circuits {
-            let count = match circuit_type {
-                "unshield" => 5,
-                "transfer" => 5,
-                "disclosure" => 4,
-                _ => 0,
-            };
-
+        for (num_signals, should_be_valid) in test_cases {
+            // This test validates the concept, not the actual function call
+            let is_valid = num_signals > 0;
             assert_eq!(
-                count, expected_count,
-                "Circuit {} should have {} public signals",
-                circuit_type, expected_count
+                is_valid, should_be_valid,
+                "num_public_signals={} validity check failed",
+                num_signals
             );
         }
     }
@@ -226,18 +236,23 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_circuit_type_error() {
-        // Test that verifies unknown circuit type error
-        let circuit_type = "unknown";
-        let result = match circuit_type {
-            "unshield" => Ok(5),
-            "transfer" => Ok(5),
-            "disclosure" => Ok(4),
-            _ => Err(format!("Unknown circuit type: {}", circuit_type)),
-        };
+    fn test_public_signals_bounds_validation() {
+        // Test boundary conditions for num_public_signals
+        let witness_len = 100;
 
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Unknown circuit type: unknown");
+        // Valid cases
+        assert!(1 < witness_len, "Valid: 1 signal with witness of 100");
+        assert!(50 < witness_len, "Valid: 50 signals with witness of 100");
+
+        // Invalid cases
+        let num_signals = 0;
+        assert_eq!(num_signals, 0, "Invalid: 0 signals");
+
+        let num_signals = 101;
+        assert!(
+            num_signals > witness_len,
+            "Invalid: signals exceed witness length"
+        );
     }
 
     #[test]

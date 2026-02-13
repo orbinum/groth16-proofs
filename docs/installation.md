@@ -27,26 +27,24 @@ use orbinum_groth16_proofs::generate_proof_from_witness;
 let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 ```
 
-### As an NPM Package (WASM)
+### As a WASM Module
 
-Install via npm:
+**Note**: This library is not published to NPM. To use WASM, download the precompiled binaries from [GitHub Releases](https://github.com/orbinum/groth16-proofs/releases).
 
+1. Download `orb-groth16-proof.tar.gz` from the latest release
+2. Extract to your project:
 ```bash
-npm install groth16-proofs
+tar -xzf orb-groth16-proof.tar.gz -C ./wasm
 ```
 
-Or yarn:
-
-```bash
-yarn add groth16-proofs
-```
-
-Then import in TypeScript/JavaScript:
+3. Import in TypeScript/JavaScript:
 
 ```typescript
-import { generateProofWasm } from 'orbinum-groth16-proofs';
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
 
-const result = generateProofWasm('unshield', witnessJson, provingKeyBytes);
+// numPublicSignals depends on your circuit (check your circuit definition)
+const numPublicSignals = 5;
+const result = generate_proof_wasm(numPublicSignals, witnessJson, provingKeyBytes);
 ```
 
 ### Development Installation
@@ -79,7 +77,7 @@ make build
 
 ```bash
 make build-wasm
-# Output: ./pkg/orbinum_groth16_proofs.wasm
+# Output: ./pkg/groth16_proofs_bg.wasm
 ```
 
 ### Both
@@ -126,71 +124,24 @@ wasm-pack build --target web --out-dir ./pkg --release --features wasm
 
 ## Quick Start
 
-### Rust Example
+Once installed, see the **[Usage Guide](./usage.md)** for:
+- Complete API reference for Rust and WASM
+- Full working examples (Browser, Node.js, native)
+- Error handling and best practices
+- Performance optimization tips
+
+**Minimal example**:
 
 ```rust
-use orbinum_groth16_proofs::generate_proof_from_witness;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Witness data (hex-encoded field elements)
-    let witness = vec![
-        "0x0100000000000000000000000000000000000000000000000000000000000000".to_string(),
-        // ... ~11,808 elements total
-    ];
-    
-    // Generate proof
-    let proof_bytes = generate_proof_from_witness(&witness, "proving_key.ark")?;
-    
-    println!("Proof (128 bytes): 0x{}", hex::encode(&proof_bytes));
-    Ok(())
-}
+// Rust
+use groth16_proofs::generate_proof_from_witness;
+let proof = generate_proof_from_witness(&witness, "key.ark")?;
 ```
 
-### TypeScript Example (Browser)
-
 ```typescript
-import { generateProofWasm } from 'orbinum-groth16-proofs';
-
-async function generateProof() {
-  // Load witness and proving key
-  const witness = [
-    "0x0100000000000000000000000000000000000000000000000000000000000000",
-    // ...
-  ];
-  
-  const provingKeyFile = await fetch('proving_keys/unshield.ark');
-  const provingKeyBytes = new Uint8Array(await provingKeyFile.arrayBuffer());
-  
-  // Generate proof
-  try {
-    const resultJson = generateProofWasm(
-      'unshield',
-      JSON.stringify(witness),
-      provingKeyBytes
-    );
-    
-    const { proof, publicSignals } = JSON.parse(resultJson);
-    console.log('✓ Proof generated:', proof);
-    console.log('✓ Public signals:', publicSignals);
-  } catch (error) {
-    console.error('✗ Proof generation failed:', error);
-  }
-}
-```
-
-### TypeScript Example (Node.js WASM)
-
-```typescript
-import { generateProofWasm } from 'orbinum-groth16-proofs';
-import fs from 'fs';
-
-const witness = JSON.parse(fs.readFileSync('witness.json', 'utf-8'));
-const provingKeyBytes = fs.readFileSync('proving_key.ark');
-
-const result = generateProofWasm('unshield', JSON.stringify(witness), new Uint8Array(provingKeyBytes));
-const { proof, publicSignals } = JSON.parse(result);
-
-console.log(proof, publicSignals);
+// WASM
+import { generate_proof_wasm } from './wasm/groth16_proofs.js';
+const result = generate_proof_wasm(numPublicSignals, witnessJson, keyBytes);
 ```
 
 ## Configuration
@@ -264,5 +215,3 @@ Ensure your TypeScript config includes WASM types:
 ## Next Steps
 
 - Read the [Usage Guide](./usage.md) for detailed API reference
-- Check the [tests](../src/) for more examples
-- See [GitHub Actions CI](../.github/workflows/) for build examples
