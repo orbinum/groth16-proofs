@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide explains how to install and use `orbinum-groth16-proofs` as either a native Rust library or a WASM module for JavaScript/TypeScript.
+This guide explains how to install and use `groth16-proofs` as either a native Rust library or a WASM module for JavaScript/TypeScript.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-orbinum-groth16-proofs = "0.1"
+groth16-proofs = "0.1"
 ```
 
 Then import in your code:
@@ -32,13 +32,13 @@ let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 Install via npm:
 
 ```bash
-npm install orbinum-groth16-proofs
+npm install groth16-proofs
 ```
 
 Or yarn:
 
 ```bash
-yarn add orbinum-groth16-proofs
+yarn add groth16-proofs
 ```
 
 Then import in TypeScript/JavaScript:

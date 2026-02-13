@@ -1,8 +1,8 @@
-# orbinum-groth16-proofs
+# groth16-proofs
 
 > High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol
 
-[![Crates.io](https://img.shields.io/crates/v/orbinum-groth16-proofs.svg)](https://crates.io/crates/orbinum-groth16-proofs)
+[![Crates.io](https://img.shields.io/crates/v/groth16-proofs.svg)](https://crates.io/crates/groth16-proofs)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20GPL--3.0-blue)](./LICENSE-APACHE2)
 
 Efficient **Groth16 zero-knowledge proof generator** for Orbinum's privacy protocol. Compiles to both native Rust and WebAssembly for maximum flexibility.
@@ -14,12 +14,12 @@ Efficient **Groth16 zero-knowledge proof generator** for Orbinum's privacy proto
 **Rust**:
 ```toml
 [dependencies]
-orbinum-groth16-proofs = "0.1"
+groth16-proofs = "0.1"
 ```
 
 **JavaScript/npm**:
 ```bash
-npm install orbinum-groth16-proofs
+npm install groth16-proofs
 ```
 
 ### Use
@@ -33,7 +33,7 @@ let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 
 **JavaScript (Browser/Node.js)**:
 ```typescript
-import { generateProofWasm } from 'orbinum-groth16-proofs';
+import { generateProofWasm } from 'groth16-proofs';
 
 const result = generateProofWasm('unshield', witnessJson, provingKeyBytes);
 ```
@@ -134,7 +134,7 @@ See [Makefile](./Makefile) for all available targets.
 
 This crate is published to both registries:
 
-- **Rust**: [crates.io/crates/orbinum-groth16-proofs](https://crates.io/crates/orbinum-groth16-proofs)
+- **Rust**: [crates.io/crates/groth16-proofs](https://crates.io/crates/groth16-proofs)
 
 ## License
 

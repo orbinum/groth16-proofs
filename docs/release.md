@@ -1,6 +1,6 @@
 # Release Process
 
-This document explains how releases are managed for `orbinum-groth16-proofs`.
+This document explains how releases are managed for `groth16-proofs`.
 
 ## Overview
 
@@ -188,7 +188,7 @@ Published as: `orbinum-groth16-proofs`
 **Install**:
 ```toml
 [dependencies]
-orbinum-groth16-proofs = "0.2"
+groth16-proofs = "0.2"
 ```
 
 ### npm

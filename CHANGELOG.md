@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-02-12
 
 ### Added
-- Initial public release of orbinum-groth16-proofs
+- Initial public release of groth16-proofs
 - Native Rust library for Groth16 proof generation
 - WebAssembly (WASM) module for browser compatibility
 - Support for BN254 curve
