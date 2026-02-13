@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **BREAKING**: `generate_proof_wasm()` now accepts `num_public_signals: usize` instead of `circuit_type: &str`
+  - Makes the library truly generic and usable with any Groth16 circuit
+  - No need to modify source code for custom circuits
+
+### Added
+- Validation for `num_public_signals` parameter (must be > 0 and < witness length)
+
+### Removed
+- Hardcoded circuit type mappings ("unshield", "transfer", "disclosure")
+
 ## [0.1.0] - 2026-02-12
 
 ### Added
