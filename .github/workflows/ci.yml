@@ -66,7 +66,7 @@ jobs:
         run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
       
       - name: Archive WASM package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wasm-pkg
           path: pkg/
