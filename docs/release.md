@@ -5,13 +5,79 @@ This document explains how releases are managed for `groth16-proofs`.
 ## Overview
 
 Releases are **fully automated** using:
-- **cargo-release**: Manages version bumping and tagging
+- **cargo-release**: Manages version bumping, CHANGELOG updates, and tagging
 - **GitHub Actions**: CI/CD pipeline for building, testing, and publishing
-- **CHANGELOG.md**: Manual or auto-generated changelog
+- **CHANGELOG.md**: Automatically updated by cargo-release
 
-## Manual Changelog Management
+## How It Works
 
-The [CHANGELOG.md](../CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/) format:
+### Automated CHANGELOG Updates
+
+`cargo-release` automatically updates the CHANGELOG:
+
+1. Moves `[Unreleased]` changes to a new version section
+2. Adds the current date
+3. Creates version comparison links
+4. Commits the changes with message: `chore(release): {{version}}`
+5. Creates a git tag
+
+**No manual CHANGELOG editing required!** Just keep adding changes under `[Unreleased]`.
+
+## Release Process
+
+### 1. Add Changes to CHANGELOG
+
+Keep [CHANGELOG.md](../CHANGELOG.md) updated with changes under `[Unreleased]`:
+
+```markdown
+## [Unreleased]
+
+### Added
+- New decimal witness format support
+- `generate_proof_from_decimal_wasm()` function
+
+### Changed
+- Updated documentation
+
+### Fixed
+- Bug in bounds checking
+```
+
+### 2. Bump Version in Cargo.toml
+
+Update the version manually:
+
+```toml
+[package]
+name = "groth16-proofs"
+version = "1.1.0"  # ← Change this
+```
+
+### 3. Commit and Push
+
+```bash
+git add Cargo.toml
+git commit -m "chore: bump version to 1.1.0"
+git push origin main
+```
+
+### 4. Automatic Pipeline Execution
+
+The GitHub Actions workflow will:
+
+1. ✅ Install cargo-release
+2. ✅ Run `cargo release` to update CHANGELOG automatically
+3. ✅ Create git tag (e.g., `v1.1.0`)
+4. ✅ Push CHANGELOG commit and tag
+5. ✅ Build WASM with wasm-pack
+6. ✅ Create GitHub Release with WASM artifact
+7. ✅ Publish to crates.io
+
+**The CHANGELOG is automatically updated from [Unreleased] to the new version!**
+
+## Manual Changelog Management (Legacy)
+
+If you prefer manual control, you can update CHANGELOG.md before step 2:
 
 ### Structure
 
