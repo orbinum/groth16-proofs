@@ -96,14 +96,6 @@ The GitHub Actions pipeline will:
 - Create release with tag
 ```
 
-#### Publish to npm:
-
-```yaml
-- Build WASM (second time)
-- Publish pkg/ directory to npm
-- Uses NODE_AUTH_TOKEN secret
-```
-
 ## Configuration Files
 
 ### `.cargo/release.toml`
@@ -183,7 +175,7 @@ tar -xzf pkg.tar.gz
 
 ### crates.io
 
-Published as: `orbinum-groth16-proofs`
+Published as: `groth16-proofs`
 
 **Install**:
 ```toml
@@ -191,13 +183,14 @@ Published as: `orbinum-groth16-proofs`
 groth16-proofs = "0.2"
 ```
 
-### npm
+### WASM
 
-Published as: `orbinum-groth16-proofs`
+Not published to NPM. Download precompiled binaries from GitHub Releases:
 
-**Install**:
+**Download**:
 ```bash
-npm install orbinum-groth16-proofs
+curl -L https://github.com/orbinum/groth16-proofs/releases/download/v0.2.0/orb-groth16-proof.tar.gz -o wasm.tar.gz
+tar -xzf wasm.tar.gz -C ./wasm
 ```
 
 ## Manual Release (Fallback)
@@ -278,16 +271,12 @@ git push origin main
 # ✅ WASM builds
 # ✅ Published to crates.io
 # ✅ GitHub release created with orb-groth16-proof.tar.gz
-# ✅ npm package published
 ```
 
 Then verify:
 ```bash
 # Check on crates.io
-curl https://crates.io/api/v1/crates/orbinum-groth16-proofs/0.2.0
-
-# Check on npm
-npm info orbinum-groth16-proofs@0.2.0
+curl https://crates.io/api/v1/crates/groth16-proofs/0.2.0
 
 # Check GitHub
 curl https://api.github.com/repos/orbinum/groth16-proofs/releases/latest
