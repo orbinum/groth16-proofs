@@ -3,8 +3,6 @@ name: Release
 on:
     push:
         branches: [main]
-        tags:
-            - "v*"
         paths:
             - "Cargo.toml"
             - "src/**"
@@ -12,11 +10,10 @@ on:
 
 permissions:
     contents: write
-    packages: write
 
 jobs:
     release:
-        name: Release with cargo-release
+        name: Build, Release, and Publish
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -34,49 +31,51 @@ jobs:
             - name: Install wasm-pack
               run: cargo install wasm-pack
 
-            - name: Install cargo-release
-              run: cargo install cargo-release
-
-            - name: Configure git
+            - name: Extract version from Cargo.toml
+              id: version
               run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+                  echo "📦 Version: $VERSION"
 
-            - name: Check if triggered by tag
+            - name: Check if tag already exists
               id: check_tag
               run: |
-                  if [[ $GITHUB_REF == refs/tags/* ]]; then
-                    echo "is_tag=true" >> $GITHUB_OUTPUT
+                  if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+                    echo "exists=true" >> $GITHUB_OUTPUT
+                    echo "⚠️  Tag v${{ steps.version.outputs.version }} already exists"
                   else
-                    echo "is_tag=false" >> $GITHUB_OUTPUT
+                    echo "exists=false" >> $GITHUB_OUTPUT
+                    echo "✅ Tag v${{ steps.version.outputs.version }} does not exist, proceeding"
                   fi
 
             - name: Build WASM for release
+              if: steps.check_tag.outputs.exists == 'false'
               run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
 
             - name: Create WASM package artifact
+              if: steps.check_tag.outputs.exists == 'false'
               run: |
                   cd pkg
                   tar -czf ../orb-groth16-proof.tar.gz .
                   cd ..
-                  echo "WASM_ARTIFACT=orb-groth16-proof.tar.gz" >> $GITHUB_ENV
+                  ls -lh orb-groth16-proof.tar.gz
 
-            - name: Publish to crates.io
-              if: steps.check_tag.outputs.is_tag == 'false'
-              run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-              continue-on-error: true
-
-            - name: Run cargo-release
-              if: steps.check_tag.outputs.is_tag == 'false'
-              run: cargo release --no-confirm --execute
-              env:
-                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-            - name: Upload WASM package to GitHub release
+            - name: Create GitHub Release and Tag
+              if: steps.check_tag.outputs.exists == 'false'
               uses: softprops/action-gh-release@v1
-              if: startsWith(github.ref, 'refs/tags/')
               with:
+                  tag_name: ${{ steps.version.outputs.tag }}
+                  name: Release ${{ steps.version.outputs.version }}
                   files: orb-groth16-proof.tar.gz
                   draft: false
+                  generate_release_notes: true
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Publish to crates.io
+              if: steps.check_tag.outputs.exists == 'false'
+              run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+              env:
+                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
