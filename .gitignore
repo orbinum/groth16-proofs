@@ -19,6 +19,7 @@ wasm-pack.log
 # Build artifacts
 dist/
 build/
+orb-groth16-proof.tar.gz
 
 # Environment
 .env
