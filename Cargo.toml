@@ -1,6 +1,6 @@
 [package]
 name = "groth16-proofs"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 license = "Apache-2.0 OR GPL-3.0-or-later"
 description = "High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol"
