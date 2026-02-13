@@ -26,12 +26,20 @@ use orbinum_groth16_proofs::generate_proof_from_witness;
 let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 ```
 
-**JavaScript (Browser/Node.js)**:
+**JavaScript (Browser/Node.js)** - Direct from snarkjs:
 ```typescript
-// Import from downloaded WASM module (see releases)
-import { generate_proof_wasm } from './wasm/groth16_proofs.js';
+import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+import * as snarkjs from 'snarkjs';
 
-const result = generate_proof_wasm(5, witnessJson, provingKeyBytes); // 5 = number of public signals
+// Calculate witness with snarkjs
+const witnessArray = await snarkjs.wtns.exportJson('witness.wtns');
+
+// Generate proof (no conversion needed!)
+const result = generate_proof_from_decimal_wasm(
+  5,  // number of public signals
+  JSON.stringify(witnessArray),  // direct from snarkjs
+  provingKeyBytes
+);
 ```
 
 📖 **Full guides**: See [Installation](./docs/installation.md) and [Usage](./docs/usage.md)
@@ -44,6 +52,7 @@ This crate generates **128-byte compressed Groth16 proofs** from witness data us
 - **Curves**: BN254 (Ethereum-compatible)
 - **Targets**: Native (Rust) + WebAssembly
 - **Circuits**: Unshield, Transfer, Disclosure
+- **Formats**: Decimal (snarkjs native) or Hex little-endian
 
 ## Architecture
 
@@ -79,7 +88,7 @@ This crate generates **128-byte compressed Groth16 proofs** from witness data us
 |-----------|----------|---------|
 | **proof.rs** | `src/` | Core Groth16 generation using arkworks |
 | **circuit.rs** | `src/` | Circuit wrapper implementing ConstraintSynthesizer |
-| **utils.rs** | `src/` | Hex ↔ field element conversions |
+| **utils.rs** | `src/` | Format conversions (decimal ↔ hex ↔ field elements) |
 | **wasm.rs** | `src/` | WASM FFI bindings with JSON I/O |
 | **binary** | `src/bin/` | CLI tool for Node.js integration |
 
@@ -87,6 +96,7 @@ This crate generates **128-byte compressed Groth16 proofs** from witness data us
 
 ✅ **Multiple Targets**: Native + WASM  
 ✅ **Fast**: 5-8 second proof generation  
+✅ **Multiple Formats**: Decimal (snarkjs native) or Hex LE  
 ✅ **Type-Safe**: Memory-safe cryptography  
 ✅ **Well-Tested**: 21+ tests included  
 ✅ **Automated Release**: CI/CD pipeline ready  
@@ -110,6 +120,7 @@ See [Makefile](./Makefile) for all available targets.
 
 - [**Installation Guide**](./docs/installation.md) - Setup for Rust and JavaScript
 - [**Usage Guide**](./docs/usage.md) - Complete API reference with examples
+- [**Witness Formats**](./docs/witness-formats.md) - Decimal vs Hex LE formats explained
 - [**Release Process**](./docs/release.md) - How releases are managed
 
 ## Performance
