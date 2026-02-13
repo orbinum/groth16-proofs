@@ -28,8 +28,10 @@ jobs:
               with:
                   cache-directories: target
 
-            - name: Install wasm-pack
-              run: cargo install wasm-pack
+            - name: Install wasm-pack and cargo-release
+              run: |
+                  cargo install wasm-pack
+                  cargo install cargo-release
 
             - name: Extract version from Cargo.toml
               id: version
@@ -49,6 +51,30 @@ jobs:
                     echo "exists=false" >> $GITHUB_OUTPUT
                     echo "✅ Tag v${{ steps.version.outputs.version }} does not exist, proceeding"
                   fi
+
+            - name: Configure git for cargo-release
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Update CHANGELOG with cargo-release
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  # cargo-release will update CHANGELOG, commit, and tag
+                  cargo release ${{ steps.version.outputs.version }} \
+                    --execute \
+                    --no-confirm \
+                    --no-publish \
+                    --no-push
+              env:
+                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            
+            - name: Push changes and tags
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  git push origin main
+                  git push origin v${{ steps.version.outputs.version }}
 
             - name: Build WASM for release
               if: steps.check_tag.outputs.exists == 'false'

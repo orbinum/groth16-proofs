@@ -10,10 +10,37 @@ This library generates **Groth16 zero-knowledge proofs** from pre-calculated wit
 2. **Processing**: Converts to BN254 field elements, generates Groth16 proof
 3. **Output**: 128-byte compressed proof + public signals
 
+## Witness Formats
+
+This library supports **two witness formats**:
+
+### 1. **Decimal Format (snarkjs native)** - Recommended ✅
+
+Direct output from snarkjs - no conversion needed:
+```json
+["1", "12345", "67890", ...]
+```
+Use `generate_proof_from_decimal_wasm()` or `decimal_to_field()`.
+
+### 2. **Hex Little-Endian Format** (legacy)
+
+Hex-encoded 32-byte field elements:
+```json
+["0x0100...00", "0x3930...00", ...]
+```
+Use `generate_proof_wasm()` or `hex_to_field()`.
+
+### Why Two Formats?
+
+- **Decimal**: Native snarkjs output, no conversion overhead
+- **Hex LE**: Required by arkworks internally (handled automatically)
+
+The library converts decimal → hex LE internally, so you don't need to worry about the conversion.
+
 ## Proof Generation Flow
 
 ```
-Witness (hex strings)
+Witness (decimal or hex)
     ↓ [parse and convert]
     ↓
 Field Elements (BN254)
@@ -66,27 +93,114 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### `decimal_to_field()`
+
+Convert a decimal string (snarkjs format) to a BN254 field element.
+
+**Signature**:
+```rust
+pub fn decimal_to_field(decimal_str: &str) -> Result<Bn254Fr, String>
+```
+
+**Arguments**:
+- `decimal_str`: Decimal string representation (e.g., `"12345"`)
+
+**Example**:
+```rust
+use orbinum_groth16_proofs::decimal_to_field;
+
+let field_element = decimal_to_field("12345")?;
+assert_eq!(field_element, Bn254Fr::from(12345u64));
+```
+
 ### `hex_to_field()`
 
-Convert a hex string to a BN254 field element (mainly for testing/debugging).
+Convert a hex string (little-endian) to a BN254 field element.
 
 **Signature**:
 ```rust
 pub fn hex_to_field(hex_str: &str) -> Result<Bn254Fr, String>
 ```
 
+**Arguments**:
+- `hex_str`: Hex string with optional `0x` prefix (little-endian, 32 bytes)
+
 **Example**:
 ```rust
 use orbinum_groth16_proofs::hex_to_field;
 
-let field_element = hex_to_field("0x0123456789abcdef")?;
+// Little-endian hex representation of 1
+let field_element = hex_to_field("0x0100000000000000000000000000000000000000000000000000000000000000")?;
+assert_eq!(field_element, Bn254Fr::from(1u64));
 ```
 
 ## WASM JavaScript API
 
-### `generate_proof_wasm()`
+### `generate_proof_from_decimal_wasm()` - Recommended ✅
 
-Browser-compatible proof generation.
+Generate proof from snarkjs witness (decimal format) - no conversion needed!
+
+**Signature**:
+```typescript
+function generate_proof_from_decimal_wasm(
+    numPublicSignals: number,    // Number of public signals to extract
+    witnessJson: string,         // JSON array of decimal strings
+    provingKeyBytes: Uint8Array  // Binary proving key
+): string                        // JSON output
+```
+
+**Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `numPublicSignals` | number | Number of public signals to extract from witness |
+| `witnessJson` | string | JSON string: `'["1", "12345", "67890", ...]'` (decimal) |
+| `provingKeyBytes` | Uint8Array | Binary proving key (from `.ark` file) |
+
+**Returns**: JSON string
+```json
+{
+  "proof": "0x...",                         // 128-byte compressed Groth16 proof
+  "publicSignals": ["0x...", "0x...", ...]  // Public signals as hex
+}
+```
+
+**Example (with snarkjs)**:
+```typescript
+import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+import * as snarkjs from 'snarkjs';
+
+async function generateProof(circuitInputs) {
+  // Step 1: Calculate witness using snarkjs
+  const { witness } = await snarkjs.wtns.calculate(
+    circuitInputs,
+    'circuit.wasm',
+    'witness.wtns'
+  );
+  
+  // Step 2: Export witness as array (already in decimal format!)
+  const witnessArray = await snarkjs.wtns.exportJson('witness.wtns');
+  
+  // Step 3: Load proving key
+  const provingKey = await fetch('circuit_pk.ark')
+    .then(r => r.arrayBuffer())
+    .then(b => new Uint8Array(b));
+  
+  // Step 4: Generate proof (pass witness directly!)
+  const resultJson = generate_proof_from_decimal_wasm(
+    5,  // number of public signals
+    JSON.stringify(witnessArray),  // No conversion needed!
+    provingKey
+  );
+  
+  const { proof, publicSignals } = JSON.parse(resultJson);
+  return { proof, publicSignals };
+}
+```
+
+### `generate_proof_wasm()` - Legacy
+
+Generate proof from hex little-endian witness format.
 
 **Signature**:
 ```typescript
@@ -102,7 +216,7 @@ function generate_proof_wasm(
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `numPublicSignals` | number | Number of public signals to extract from witness |
-| `witnessJson` | string | JSON string: `'["0x...", "0x...", ...]'` |
+| `witnessJson` | string | JSON string: `'["0x...", "0x...", ...]'` (hex LE) |
 | `provingKeyBytes` | Uint8Array | Binary proving key (from `.ark` file) |
 
 **Returns**: JSON string

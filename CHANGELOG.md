@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0](https://github.com/orbinum/groth16-proofs/releases/tag/v1.0.0) - 2026-02-12
 
+### Added
+- **NEW**: `decimal_to_field()` function for converting snarkjs decimal strings to field elements
+- **NEW**: `generate_proof_from_decimal_wasm()` WASM function accepting decimal witness format (snarkjs native)
+- Support for decimal witness format (no conversion needed from snarkjs output)
+- `num-bigint` dependency for decimal string parsing
+- Validation for `num_public_signals` parameter (must be > 0 and < witness length)
+- Automatic CHANGELOG updates via cargo-release in CI/CD
+
 ### Changed
 - **BREAKING**: `generate_proof_wasm()` now accepts `num_public_signals: usize` instead of `circuit_type: &str`
   - Makes the library truly generic and usable with any Groth16 circuit
   - No need to modify source code for custom circuits
-
-### Added
-- Validation for `num_public_signals` parameter (must be > 0 and < witness length)
+- Documentation updated to explain witness formats (decimal vs hex little-endian)
+- Release workflow now uses cargo-release to automatically update CHANGELOG
 
 ### Removed
 - Hardcoded circuit type mappings ("unshield", "transfer", "disclosure")

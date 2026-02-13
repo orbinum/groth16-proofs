@@ -20,8 +20,8 @@ pub mod wasm;
 // Public exports
 pub use circuit::WitnessCircuit;
 pub use proof::generate_proof_from_witness;
-pub use utils::hex_to_field;
+pub use utils::{decimal_to_field, hex_to_field};
 
 // Re-export WASM functions when feature is enabled
 #[cfg(feature = "wasm")]
-pub use wasm::{generate_proof_wasm, init_panic_hook};
+pub use wasm::{generate_proof_from_decimal_wasm, generate_proof_wasm, init_panic_hook};
