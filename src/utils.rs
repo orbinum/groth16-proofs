@@ -2,6 +2,23 @@
 
 use ark_bn254::Fr as Bn254Fr;
 use ark_ff::PrimeField;
+use num_bigint::BigUint;
+
+/// Convert decimal string to field element (snarkjs format)
+///
+/// Accepts decimal string representation of field element (e.g., "123456")
+/// This is the native format used by snarkjs witness output.
+pub fn decimal_to_field(decimal_str: &str) -> Result<Bn254Fr, String> {
+    // Parse as BigUint
+    let big_uint = BigUint::parse_bytes(decimal_str.as_bytes(), 10)
+        .ok_or_else(|| format!("Failed to parse decimal string: {}", decimal_str))?;
+
+    // Convert to bytes (little-endian for arkworks)
+    let bytes = big_uint.to_bytes_le();
+
+    // Convert to field element (with modular reduction)
+    Ok(Bn254Fr::from_le_bytes_mod_order(&bytes))
+}
 
 /// Convert hex string to field element
 ///
@@ -31,6 +48,37 @@ pub fn hex_to_field(hex_str: &str) -> Result<Bn254Fr, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_decimal_to_field() {
+        let decimal = "1";
+        let field = decimal_to_field(decimal).unwrap();
+        assert_eq!(field, Bn254Fr::from(1u64));
+    }
+
+    #[test]
+    fn test_decimal_to_field_large() {
+        let decimal = "12345678901234567890";
+        let result = decimal_to_field(decimal);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_decimal_to_field_zero() {
+        let decimal = "0";
+        let field = decimal_to_field(decimal).unwrap();
+        assert_eq!(field, Bn254Fr::from(0u64));
+    }
+
+    #[test]
+    fn test_decimal_to_field_invalid() {
+        let decimal = "not_a_number";
+        let result = decimal_to_field(decimal);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Failed to parse decimal string"));
+    }
 
     #[test]
     fn test_hex_to_field() {
