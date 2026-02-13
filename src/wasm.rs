@@ -10,7 +10,7 @@ use ark_std::rand::SeedableRng;
 use wasm_bindgen::prelude::*;
 
 use crate::circuit::WitnessCircuit;
-use crate::utils::hex_to_field;
+use crate::utils::{decimal_to_field, hex_to_field};
 
 /// Initialize panic hook for better error messages in browser.
 /// Only call this when running in actual WASM environment, not tests.
@@ -54,6 +54,95 @@ pub fn generate_proof_wasm(
     let witness: Vec<Bn254Fr> = witness_strings
         .iter()
         .map(|s| hex_to_field(s))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| JsValue::from_str(&e))?;
+
+    // Deserialize proving key
+    let proving_key = ProvingKey::<Bn254>::deserialize_compressed(proving_key_bytes)
+        .map_err(|e| JsValue::from_str(&format!("Failed to deserialize proving key: {e}")))?;
+
+    // Generate proof
+    let circuit = WitnessCircuit {
+        witness: witness.clone(),
+    };
+    let mut rng = StdRng::from_entropy();
+    let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)
+        .map_err(|e| JsValue::from_str(&format!("Failed to generate proof: {e}")))?;
+
+    // Serialize proof (compressed 128 bytes)
+    let mut proof_bytes = Vec::new();
+    proof
+        .serialize_compressed(&mut proof_bytes)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize proof: {e}")))?;
+
+    let proof_hex = format!("0x{}", hex::encode(&proof_bytes));
+
+    // Extract public signals
+    // Validate bounds
+    if num_public_signals == 0 {
+        return Err(JsValue::from_str(
+            "num_public_signals must be greater than 0",
+        ));
+    }
+    if num_public_signals >= witness.len() {
+        return Err(JsValue::from_str(&format!(
+            "num_public_signals ({}) exceeds witness length ({})",
+            num_public_signals,
+            witness.len()
+        )));
+    }
+
+    let public_signals: Vec<String> = witness[1..=num_public_signals]
+        .iter()
+        .map(|f| {
+            let bytes = f.into_bigint().to_bytes_le();
+            format!("0x{}", hex::encode(&bytes))
+        })
+        .collect();
+
+    // Return JSON output
+    let output = serde_json::json!({
+        "proof": proof_hex,
+        "publicSignals": public_signals,
+    });
+
+    serde_json::to_string(&output)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize output: {e}")))
+}
+
+/// Generate a Groth16 proof from witness in decimal format (snarkjs native)
+///
+/// This function accepts witness in the native snarkjs format (decimal strings)
+/// and handles the conversion to field elements internally.
+///
+/// # Arguments
+/// * `num_public_signals` - Number of public signals to extract from witness
+/// * `witness_json` - JSON array of witness values as decimal strings (e.g., `["1", "123", "456"]`)
+/// * `proving_key_bytes` - Serialized proving key (arkworks format)
+///
+/// # Returns
+/// JSON string with format: `{"proof": "0x...", "publicSignals": ["0x...", "0x..."]}`
+///
+/// # Example
+/// ```ignore
+/// // Witness directly from snarkjs (no conversion needed)
+/// let witness_json = r#"["1", "12345", "67890"]"#;
+/// let result = generate_proof_from_decimal_wasm(5, witness_json, proving_key_bytes)?;
+/// ```
+#[wasm_bindgen]
+pub fn generate_proof_from_decimal_wasm(
+    num_public_signals: usize,
+    witness_json: &str,
+    proving_key_bytes: &[u8],
+) -> Result<String, JsValue> {
+    // Parse witness JSON (decimal strings)
+    let witness_strings: Vec<String> = serde_json::from_str(witness_json)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse witness JSON: {e}")))?;
+
+    // Convert decimal strings to field elements
+    let witness: Vec<Bn254Fr> = witness_strings
+        .iter()
+        .map(|s| decimal_to_field(s))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| JsValue::from_str(&e))?;
 
