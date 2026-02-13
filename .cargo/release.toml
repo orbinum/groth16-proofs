@@ -1,0 +1,20 @@
+[release]
+update-crates-io = true
+consolidate-pushes = true
+pre-release-commit-message = "chore(release): {{version}}\n\n[skip ci]"
+tag-message = "Release {{version}}"
+tag-name = "v{{version}}"
+changelog-update = true
+pre-release-hook = [
+    { cmd = "wasm-pack", args = [
+        "build",
+        "--target",
+        "web",
+        "--out-dir",
+        "./pkg",
+        "--release",
+        "--features",
+        "wasm",
+    ] },
+]
+allow-branch = ["main"]

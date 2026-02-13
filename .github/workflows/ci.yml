@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: target
+      
+      - name: Run tests
+        run: cargo test --lib --all-features
+
+  check:
+    name: Clippy & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: target
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  build:
+    name: Build (Native + WASM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: target
+      
+      - name: Install wasm-pack
+        run: curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh
+      
+      - name: Build native release
+        run: cargo build --release
+      
+      - name: Build WASM
+        run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
+      
+      - name: Archive WASM package
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-pkg
+          path: pkg/
+          retention-days: 7
