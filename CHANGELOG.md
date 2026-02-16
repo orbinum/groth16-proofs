@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0](https://github.com/orbinum/groth16-proofs/releases/tag/v2.0.0) - 2026-02-16
 
 ### Added
 - `compress_snarkjs_proof_wasm()` WASM API for snarkjs proof (`pi_a`, `pi_b`, `pi_c`) to arkworks canonical compressed bytes conversion.
@@ -58,4 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile with development commands
 - CHANGELOG following Keep a Changelog format
 
+[Unreleased]: https://github.com/orbinum/groth16-proofs/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/orbinum/groth16-proofs/releases/tag/v2.0.0
+[1.0.0]: https://github.com/orbinum/groth16-proofs/releases/tag/v1.0.0
 [0.1.0]: https://github.com/orbinum/groth16-proofs/releases/tag/v0.1.0
