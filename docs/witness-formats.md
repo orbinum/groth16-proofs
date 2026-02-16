@@ -4,10 +4,10 @@ This document explains the different witness formats supported by groth16-proofs
 
 ## Overview
 
-**groth16-proofs** supports two witness formats:
+**groth16-proofs** uses decimal witness format for WASM proof generation:
 
 1. **Decimal Format** (Recommended) - Native snarkjs output
-2. **Hex Little-Endian Format** (Legacy) - Custom format
+2. **Hex Little-Endian Format** - Utility conversion format for low-level Rust helpers
 
 ## Format Comparison
 
@@ -17,7 +17,7 @@ This document explains the different witness formats supported by groth16-proofs
 | **Example** | `"12345"` | `"0x3930000000...00"` |
 | **Conversion needed** | ❌ No | ✅ Yes |
 | **Function (Rust)** | `decimal_to_field()` | `hex_to_field()` |
-| **Function (WASM)** | `generate_proof_from_decimal_wasm()` | `generate_proof_wasm()` |
+| **Function (WASM)** | `generate_proof_from_decimal_wasm()` | N/A |
 | **Use case** | Modern integrations | Legacy code |
 
 ## 1. Decimal Format (Recommended ✅)
@@ -79,7 +79,7 @@ let witness: Vec<Bn254Fr> = decimal_strings
     .collect::<Result<Vec<_>, _>>()?;
 ```
 
-## 2. Hex Little-Endian Format (Legacy)
+## 2. Hex Little-Endian Format (Utility / Rust)
 
 ### What is it?
 
@@ -127,22 +127,9 @@ Reverse bytes (LE): 0x3930000000...0000
 ### How to use
 
 **WASM (JavaScript/TypeScript)**:
-```typescript
-import { generate_proof_wasm } from './wasm/groth16_proofs.js';
 
-// If you already have hex LE witness
-const witnessHexLE = [
-  "0x0100000000000000000000000000000000000000000000000000000000000000",
-  "0x3930000000000000000000000000000000000000000000000000000000000000",
-  // ...
-];
-
-const resultJson = generate_proof_wasm(
-  5,
-  JSON.stringify(witnessHexLE),
-  provingKeyBytes
-);
-```
+Use `generate_proof_from_decimal_wasm()` with decimal witness exported by snarkjs.
+Hex LE is not accepted by the WASM proof-generation API.
 
 **Rust**:
 ```rust
@@ -203,9 +190,8 @@ function hexLEToDecimal(hexLE: string): string {
 
 ### Use Hex LE Format if:
 
-- Working with existing code that uses it
-- Interfacing with systems that expect hex
-- Need to maintain compatibility with older versions
+- You need low-level conversion utilities in Rust
+- You are working with internal field-level tooling
 
 ## Technical Details
 
@@ -269,21 +255,15 @@ async function generateProofForCircuit(inputs: any) {
 }
 ```
 
-### Legacy Hex LE Integration
+### snarkjs Proof Interoperability
 
 ```typescript
-import { generate_proof_wasm } from './groth16_proofs.js';
+import { compress_snarkjs_proof_wasm } from './groth16_proofs.js';
 
-// If you have legacy code that produces hex LE
-const witnessHexLE = loadLegacyWitness(); // ["0x...", "0x...", ...]
-
-const resultJson = generate_proof_wasm(
-  5,
-  JSON.stringify(witnessHexLE),
-  provingKeyBytes
-);
+const compressedProof = compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
+// "0x..." (128-byte arkworks canonical compressed proof)
 ```
 
 ## Summary
 
-**Recommendation**: Use **decimal format** for all new integrations. It's simpler, more efficient, and matches the native snarkjs output format. The hex LE format is supported for backward compatibility but requires unnecessary conversion overhead.
+**Recommendation**: Use **decimal format** for all new integrations. It's simpler, more efficient, and matches the native snarkjs output format. The hex LE format remains useful for low-level Rust utilities, but not for WASM proof generation.
