@@ -12,18 +12,5 @@ tag-message = "Release {{version}}"
 tag-name = "v{{version}}"
 # IMPORTANT: Automatically update CHANGELOG.md
 changelog-update = true
-# Build WASM before release (as a pre-release hook)
-pre-release-hook = [
-    { cmd = "wasm-pack", args = [
-        "build",
-        "--target",
-        "web",
-        "--out-dir",
-        "./pkg",
-        "--release",
-        "--features",
-        "wasm",
-    ] },
-]
 # Only allow releases from main branch
 allow-branch = ["main"]

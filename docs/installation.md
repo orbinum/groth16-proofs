@@ -16,23 +16,29 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-groth16-proofs = "0.1"
+groth16-proofs = "2.0"
 ```
 
 Then import in your code:
 
 ```rust
-use orbinum_groth16_proofs::generate_proof_from_witness;
+use groth16_proofs::generate_proof_from_witness;
 
 let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 ```
 
 ### As a WASM Module
 
-**Note**: This library is not published to NPM. To use WASM, download the precompiled binaries from [GitHub Releases](https://github.com/orbinum/groth16-proofs/releases).
+Install from npm:
 
-1. Download `orb-groth16-proof.tar.gz` from the latest release
-2. Extract to your project:
+```bash
+npm install @orbinum/groth16-proofs
+```
+
+You can also download precompiled binaries from [GitHub Releases](https://github.com/orbinum/groth16-proofs/releases).
+
+1. Download `orb-groth16-proof.tar.gz` from the latest release (optional)
+2. Extract to your project (optional):
 ```bash
 tar -xzf orb-groth16-proof.tar.gz -C ./wasm
 ```
@@ -40,11 +46,11 @@ tar -xzf orb-groth16-proof.tar.gz -C ./wasm
 3. Import in TypeScript/JavaScript:
 
 ```typescript
-import { generate_proof_wasm } from './wasm/groth16_proofs.js';
+import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
 
 // numPublicSignals depends on your circuit (check your circuit definition)
 const numPublicSignals = 5;
-const result = generate_proof_wasm(numPublicSignals, witnessJson, provingKeyBytes);
+const result = generate_proof_from_decimal_wasm(numPublicSignals, witnessJson, provingKeyBytes);
 ```
 
 ### Development Installation
@@ -140,8 +146,8 @@ let proof = generate_proof_from_witness(&witness, "key.ark")?;
 
 ```typescript
 // WASM
-import { generate_proof_wasm } from './wasm/groth16_proofs.js';
-const result = generate_proof_wasm(numPublicSignals, witnessJson, keyBytes);
+import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+const result = generate_proof_from_decimal_wasm(numPublicSignals, witnessJson, keyBytes);
 ```
 
 ## Configuration

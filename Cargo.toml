@@ -1,6 +1,6 @@
 [package]
 name = "groth16-proofs"
-version = "1.1.0"
+version = "2.0.0"
 edition = "2021"
 license = "Apache-2.0 OR GPL-3.0-or-later"
 description = "High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol"
@@ -11,6 +11,10 @@ keywords = ["zk-snark", "groth16", "proof-generation", "arkworks", "privacy"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+# npm package metadata (consumed by wasm-pack)
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = true
 
 [[bin]]
 name = "generate-proof-from-witness"

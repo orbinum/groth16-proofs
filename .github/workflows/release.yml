@@ -6,6 +6,7 @@ on:
         paths:
             - "Cargo.toml"
             - "src/**"
+            - "npm/**"
             - ".github/workflows/release.yml"
 
 permissions:
@@ -80,6 +81,23 @@ jobs:
               if: steps.check_tag.outputs.exists == 'false'
               run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
 
+            - name: Configure npm package.json
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  cd pkg
+                  # Generate package.json from template (same approach as circuits)
+                  node -e "
+                  const fs = require('fs');
+                  const template = fs.readFileSync('../npm/package.json.template', 'utf8');
+                  const rendered = template.replace(/__VERSION__/g, '${{ steps.version.outputs.version }}');
+                  JSON.parse(rendered);
+                  fs.writeFileSync('package.json', rendered);
+                  "
+                  # Copiar README específico para npm
+                  cp ../npm/README.md ./README.md
+                  echo "📦 Configured package.json:"
+                  cat package.json
+
             - name: Create WASM package artifact
               if: steps.check_tag.outputs.exists == 'false'
               run: |
@@ -105,3 +123,18 @@ jobs:
               run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
               env:
                   CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+            - name: Setup Node.js for npm publish
+              if: steps.check_tag.outputs.exists == 'false'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+                  registry-url: 'https://registry.npmjs.org'
+
+            - name: Publish to npm
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  cd pkg
+                  npm publish
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

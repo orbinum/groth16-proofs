@@ -10,7 +10,11 @@ use ark_std::rand::SeedableRng;
 use wasm_bindgen::prelude::*;
 
 use crate::circuit::WitnessCircuit;
-use crate::utils::{decimal_to_field, hex_to_field};
+use crate::utils::decimal_to_field;
+
+mod snarkjs_proof;
+
+pub use snarkjs_proof::compress_snarkjs_proof_wasm;
 
 /// Initialize panic hook for better error messages in browser.
 /// Only call this when running in actual WASM environment, not tests.
@@ -24,90 +28,6 @@ pub fn init_panic_hook() {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_panic_hook() {
     // No-op: panic hook only needed in WASM
-}
-
-/// Generate a Groth16 proof from witness (WASM interface)
-///
-/// # Arguments
-/// * `num_public_signals` - Number of public signals to extract from witness (e.g., 5 for unshield/transfer, 4 for disclosure)
-/// * `witness_json` - JSON array of witness values as strings
-/// * `proving_key_bytes` - Serialized proving key (arkworks format)
-///
-/// # Returns
-/// JSON string with format: `{"proof": "0x...", "publicSignals": ["...", "..."]}`
-///
-/// # Example
-/// ```ignore
-/// // For a circuit with 5 public signals
-/// let result = generate_proof_wasm(5, witness_json, proving_key_bytes)?;
-/// ```
-#[wasm_bindgen]
-pub fn generate_proof_wasm(
-    num_public_signals: usize,
-    witness_json: &str,
-    proving_key_bytes: &[u8],
-) -> Result<String, JsValue> {
-    // Parse witness JSON
-    let witness_strings: Vec<String> = serde_json::from_str(witness_json)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse witness JSON: {e}")))?;
-
-    let witness: Vec<Bn254Fr> = witness_strings
-        .iter()
-        .map(|s| hex_to_field(s))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| JsValue::from_str(&e))?;
-
-    // Deserialize proving key
-    let proving_key = ProvingKey::<Bn254>::deserialize_compressed(proving_key_bytes)
-        .map_err(|e| JsValue::from_str(&format!("Failed to deserialize proving key: {e}")))?;
-
-    // Generate proof
-    let circuit = WitnessCircuit {
-        witness: witness.clone(),
-    };
-    let mut rng = StdRng::from_entropy();
-    let proof = Groth16::<Bn254>::prove(&proving_key, circuit, &mut rng)
-        .map_err(|e| JsValue::from_str(&format!("Failed to generate proof: {e}")))?;
-
-    // Serialize proof (compressed 128 bytes)
-    let mut proof_bytes = Vec::new();
-    proof
-        .serialize_compressed(&mut proof_bytes)
-        .map_err(|e| JsValue::from_str(&format!("Failed to serialize proof: {e}")))?;
-
-    let proof_hex = format!("0x{}", hex::encode(&proof_bytes));
-
-    // Extract public signals
-    // Validate bounds
-    if num_public_signals == 0 {
-        return Err(JsValue::from_str(
-            "num_public_signals must be greater than 0",
-        ));
-    }
-    if num_public_signals >= witness.len() {
-        return Err(JsValue::from_str(&format!(
-            "num_public_signals ({}) exceeds witness length ({})",
-            num_public_signals,
-            witness.len()
-        )));
-    }
-
-    let public_signals: Vec<String> = witness[1..=num_public_signals]
-        .iter()
-        .map(|f| {
-            let bytes = f.into_bigint().to_bytes_le();
-            format!("0x{}", hex::encode(&bytes))
-        })
-        .collect();
-
-    // Return JSON output
-    let output = serde_json::json!({
-        "proof": proof_hex,
-        "publicSignals": public_signals,
-    });
-
-    serde_json::to_string(&output)
-        .map_err(|e| JsValue::from_str(&format!("Failed to serialize output: {e}")))
 }
 
 /// Generate a Groth16 proof from witness in decimal format (snarkjs native)
@@ -184,7 +104,8 @@ pub fn generate_proof_from_decimal_wasm(
     let public_signals: Vec<String> = witness[1..=num_public_signals]
         .iter()
         .map(|f| {
-            let bytes = f.into_bigint().to_bytes_le();
+            let mut bytes = f.into_bigint().to_bytes_le();
+            bytes.resize(32, 0u8);
             format!("0x{}", hex::encode(&bytes))
         })
         .collect();
@@ -203,7 +124,7 @@ pub fn generate_proof_from_decimal_wasm(
 //
 // Note: These tests use conditional compilation to avoid JsValue issues in native test runner.
 // They validate the underlying logic (JSON parsing, data conversion, validation) without
-// calling generate_proof_wasm() directly.
+// calling generate_proof_from_decimal_wasm() directly.
 //
 // For complete testing instructions, see: docs/testing.md
 
@@ -261,15 +182,17 @@ mod tests {
     }
 
     #[test]
-    fn test_witness_hex_to_field_conversion() {
+    fn test_witness_decimal_to_field_conversion() {
         let witness_json = r#"[
-            "0x0100000000000000000000000000000000000000000000000000000000000000",
-            "0x0500000000000000000000000000000000000000000000000000000000000000"
+            "1",
+            "5"
         ]"#;
 
         let witness_strings: Vec<String> = serde_json::from_str(witness_json).unwrap();
-        let witness_result: Result<Vec<Bn254Fr>, String> =
-            witness_strings.iter().map(|s| hex_to_field(s)).collect();
+        let witness_result: Result<Vec<Bn254Fr>, String> = witness_strings
+            .iter()
+            .map(|s| decimal_to_field(s))
+            .collect();
 
         assert!(witness_result.is_ok());
         let witness = witness_result.unwrap();
@@ -313,7 +236,8 @@ mod tests {
             .unwrap_or(&[])
             .iter()
             .map(|f| {
-                let bytes = f.into_bigint().to_bytes_le();
+                let mut bytes = f.into_bigint().to_bytes_le();
+                bytes.resize(32, 0u8);
                 format!("0x{}", hex::encode(&bytes))
             })
             .collect();
