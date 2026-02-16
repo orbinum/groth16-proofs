@@ -2,47 +2,62 @@
 
 > High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol
 
+[![npm version](https://img.shields.io/npm/v/@orbinum/groth16-proofs.svg)](https://www.npmjs.com/package/@orbinum/groth16-proofs)
 [![Crates.io](https://img.shields.io/crates/v/groth16-proofs.svg)](https://crates.io/crates/groth16-proofs)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20GPL--3.0-blue)](./LICENSE-APACHE2)
 
 Efficient **Groth16 zero-knowledge proof generator** for Orbinum's privacy protocol. Compiles to both native Rust and WebAssembly for maximum flexibility.
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Install
 
-**Rust**:
+**npm/yarn/pnpm** (WASM for JavaScript/TypeScript):
+```bash
+npm install @orbinum/groth16-proofs
+```
+
+**Rust** (Native binary):
 ```toml
 [dependencies]
-groth16-proofs = "0.1"
+groth16-proofs = "2.0"
 ```
 
 ### Use
 
-**Rust**:
-```rust
-use orbinum_groth16_proofs::generate_proof_from_witness;
-
-let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
-```
-
-**JavaScript (Browser/Node.js)** - Direct from snarkjs:
+**JavaScript/TypeScript**:
 ```typescript
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+import * as groth16 from '@orbinum/groth16-proofs';
 import * as snarkjs from 'snarkjs';
+
+// Initialize WASM
+await groth16.default();
+groth16.init_panic_hook();
 
 // Calculate witness with snarkjs
 const witnessArray = await snarkjs.wtns.exportJson('witness.wtns');
 
 // Generate proof (no conversion needed!)
-const result = generate_proof_from_decimal_wasm(
+const result = groth16.generate_proof_from_decimal_wasm(
   5,  // number of public signals
   JSON.stringify(witnessArray),  // direct from snarkjs
   provingKeyBytes
 );
+
+const { proof, publicSignals } = JSON.parse(result);
 ```
 
-📖 **Full guides**: See [Installation](./docs/installation.md) and [Usage](./docs/usage.md)
+**Rust**:
+```rust
+use groth16_proofs::generate_proof_from_witness;
+
+let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
+```
+
+📖 **Full guides**: 
+- [Installation](./docs/installation.md)
+- [Usage](./docs/usage.md)
+- [Release Process](./docs/release.md)
 
 ## What Is This?
 
@@ -52,7 +67,11 @@ This crate generates **128-byte compressed Groth16 proofs** from witness data us
 - **Curves**: BN254 (Ethereum-compatible)
 - **Targets**: Native (Rust) + WebAssembly
 - **Circuits**: Unshield, Transfer, Disclosure
-- **Formats**: Decimal (snarkjs native) or Hex little-endian
+- **WASM Input Format**: Decimal witness (snarkjs native)
+
+For interoperability with snarkjs-generated proofs, the WASM API also exposes
+`compress_snarkjs_proof_wasm()` to convert `pi_a/pi_b/pi_c` JSON into arkworks
+canonical compressed proof bytes (`0x...`, 128 bytes).
 
 ## Architecture
 
@@ -89,14 +108,15 @@ This crate generates **128-byte compressed Groth16 proofs** from witness data us
 | **proof.rs** | `src/` | Core Groth16 generation using arkworks |
 | **circuit.rs** | `src/` | Circuit wrapper implementing ConstraintSynthesizer |
 | **utils.rs** | `src/` | Format conversions (decimal ↔ hex ↔ field elements) |
-| **wasm.rs** | `src/` | WASM FFI bindings with JSON I/O |
+| **wasm.rs** | `src/` | WASM FFI bindings and public API re-exports |
+| **wasm/snarkjs_proof.rs** | `src/wasm/` | snarkjs proof parsing/validation and compression |
 | **binary** | `src/bin/` | CLI tool for Node.js integration |
 
 ## Features
 
 ✅ **Multiple Targets**: Native + WASM  
 ✅ **Fast**: 5-8 second proof generation  
-✅ **Multiple Formats**: Decimal (snarkjs native) or Hex LE  
+✅ **WASM Decimal-Only API**: Direct snarkjs witness input  
 ✅ **Type-Safe**: Memory-safe cryptography  
 ✅ **Well-Tested**: 21+ tests included  
 ✅ **Automated Release**: CI/CD pipeline ready  
@@ -120,7 +140,7 @@ See [Makefile](./Makefile) for all available targets.
 
 - [**Installation Guide**](./docs/installation.md) - Setup for Rust and JavaScript
 - [**Usage Guide**](./docs/usage.md) - Complete API reference with examples
-- [**Witness Formats**](./docs/witness-formats.md) - Decimal vs Hex LE formats explained
+- [**Witness Formats**](./docs/witness-formats.md) - Decimal witness flow and format notes
 - [**Release Process**](./docs/release.md) - How releases are managed
 
 ## Performance
@@ -140,6 +160,7 @@ See [Makefile](./Makefile) for all available targets.
 This crate is published to both registries:
 
 - **Rust**: [crates.io/crates/groth16-proofs](https://crates.io/crates/groth16-proofs)
+- **npm**: [npmjs.com/package/@orbinum/groth16-proofs](https://www.npmjs.com/package/@orbinum/groth16-proofs)
 
 ## License
 
