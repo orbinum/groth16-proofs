@@ -66,13 +66,37 @@ build-wasm: ## Build WASM module (release)
 	@echo "$(BLUE)Building WASM module...$(NC)"
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "$(YELLOW)Installing wasm-pack...$(NC)"; curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh; }
 	wasm-pack build --target web --out-dir ./pkg --release --features wasm
-	@echo "$(GREEN)✓ WASM: ./pkg/orbinum_groth16_proofs.wasm$(NC)"
+	@echo "$(BLUE)Configuring npm package...$(NC)"
+	@cd pkg && node -e "\
+		const fs = require('fs');\
+		const cargoToml = fs.readFileSync('../Cargo.toml', 'utf8');\
+		const versionMatch = cargoToml.match(/^version\s*=\s*\"(.+)\"/m);\
+		if (!versionMatch) throw new Error('Could not extract version from Cargo.toml');\
+		const template = fs.readFileSync('../npm/package.json.template', 'utf8');\
+		const rendered = template.replace(/__VERSION__/g, versionMatch[1]);\
+		JSON.parse(rendered);\
+		fs.writeFileSync('package.json', rendered);\
+	"
+	@cp npm/README.md pkg/README.md
+	@echo "$(GREEN)✓ WASM: ./pkg/@orbinum/groth16-proofs$(NC)"
 
 build-wasm-dev: ## Build WASM module (dev/unoptimized)
 	@echo "$(BLUE)Building WASM module (dev)...$(NC)"
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "$(YELLOW)Installing wasm-pack...$(NC)"; curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh; }
 	wasm-pack build --target web --out-dir ./pkg --dev --features wasm
-	@echo "$(GREEN)✓ WASM (dev): ./pkg/orbinum_groth16_proofs.wasm$(NC)"
+	@echo "$(BLUE)Configuring npm package...$(NC)"
+	@cd pkg && node -e "\
+		const fs = require('fs');\
+		const cargoToml = fs.readFileSync('../Cargo.toml', 'utf8');\
+		const versionMatch = cargoToml.match(/^version\s*=\s*\"(.+)\"/m);\
+		if (!versionMatch) throw new Error('Could not extract version from Cargo.toml');\
+		const template = fs.readFileSync('../npm/package.json.template', 'utf8');\
+		const rendered = template.replace(/__VERSION__/g, versionMatch[1]);\
+		JSON.parse(rendered);\
+		fs.writeFileSync('package.json', rendered);\
+	"
+	@cp npm/README.md pkg/README.md
+	@echo "$(GREEN)✓ WASM (dev): ./pkg/@orbinum/groth16-proofs$(NC)"
 
 # Build everything
 build-all: build build-wasm ## Build both native and WASM
