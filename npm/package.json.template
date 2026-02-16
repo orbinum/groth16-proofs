@@ -1,0 +1,39 @@
+{
+  "name": "@orbinum/groth16-proofs",
+  "version": "__VERSION__",
+  "description": "High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol",
+  "type": "module",
+  "main": "groth16_proofs.js",
+  "types": "groth16_proofs.d.ts",
+  "files": [
+    "groth16_proofs_bg.wasm",
+    "groth16_proofs.js",
+    "groth16_proofs.d.ts",
+    "LICENSE-APACHE2",
+    "LICENSE-GPL3",
+    "README.md"
+  ],
+  "keywords": [
+    "zk-snark",
+    "groth16",
+    "proof-generation",
+    "arkworks",
+    "privacy"
+  ],
+  "author": "Orbinum",
+  "license": "Apache-2.0 OR GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/orbinum/groth16-proofs.git"
+  },
+  "homepage": "https://github.com/orbinum/groth16-proofs",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
