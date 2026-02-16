@@ -236,7 +236,8 @@ mod tests {
             .unwrap_or(&[])
             .iter()
             .map(|f| {
-                let bytes = f.into_bigint().to_bytes_be(); // BE to match runtime verifier
+                let mut bytes = f.into_bigint().to_bytes_le();
+                bytes.resize(32, 0u8);
                 format!("0x{}", hex::encode(&bytes))
             })
             .collect();
