@@ -1,4 +1,3 @@
-#!/usr/bin/env rust
 //! Binary for generating Groth16 proofs from witness
 //!
 //! Usage: generate-proof-from-witness <witness.json> <proving_key.ark> [num_public_signals]
@@ -62,6 +61,9 @@ fn main() {
         std::process::exit(1);
     });
 
+    // Priority: CLI arg > JSON field > default (5)
+    let num_public_signals = cli_num_public.or(input.num_public_signals).unwrap_or(5);
+
     eprintln!(
         "🔐 Generating proof from {} witness elements...",
         input.witness.len()
@@ -69,16 +71,13 @@ fn main() {
 
     // Generate proof
     let proof_bytes =
-        generate_proof_from_witness(&input.witness, proving_key_path).unwrap_or_else(|e| {
-            eprintln!("❌ Proof generation failed: {e}");
-            std::process::exit(1);
-        });
+        generate_proof_from_witness(&input.witness, proving_key_path, num_public_signals)
+            .unwrap_or_else(|e| {
+                eprintln!("❌ Proof generation failed: {e}");
+                std::process::exit(1);
+            });
 
     eprintln!("✅ Proof generated: {} bytes", proof_bytes.len());
-
-    // Determine number of public signals
-    // Priority: CLI arg > JSON field > default (5)
-    let num_public_signals = cli_num_public.or(input.num_public_signals).unwrap_or(5); // Default to 5 (most common for unshield/transfer)
 
     eprintln!("📊 Extracting {num_public_signals} public signals");
 

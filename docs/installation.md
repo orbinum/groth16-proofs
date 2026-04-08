@@ -16,7 +16,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-groth16-proofs = "2.0"
+groth16-proofs = "3.0"
 ```
 
 Then import in your code:
@@ -24,7 +24,7 @@ Then import in your code:
 ```rust
 use groth16_proofs::generate_proof_from_witness;
 
-let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
+let proof = generate_proof_from_witness(&witness, "proving_key.ark", 5)?;;
 ```
 
 ### As a WASM Module
@@ -143,7 +143,7 @@ Once installed, see the **[Usage Guide](./usage.md)** for:
 ```rust
 // Rust — native proof generation
 use groth16_proofs::generate_proof_from_witness;
-let proof = generate_proof_from_witness(&witness_hex, "key.ark")?;
+let proof = generate_proof_from_witness(&witness_hex, "key.ark", 5)?;
 ```
 
 ```bash
@@ -169,12 +169,12 @@ The crate supports feature-based compilation:
 wasm = ["wasm-bindgen", "console_error_panic_hook"]
 ```
 
-**Build without WASM support**:
+**Build without WASM support** (default — `features = []`):
 ```bash
-cargo build --release --no-default-features
+cargo build --release
 ```
 
-**Build with WASM support** (default):
+**Build with WASM support**:
 ```bash
 cargo build --release --features wasm
 ```

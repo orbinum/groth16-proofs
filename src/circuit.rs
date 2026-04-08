@@ -1,15 +1,19 @@
-//! Circuit wrapper for arkworks constraint system
-
 use ark_bn254::Fr as Bn254Fr;
 use ark_relations::r1cs::ConstraintSynthesizer;
 
-/// Minimal circuit wrapper for arkworks
+/// Arkworks `ConstraintSynthesizer` wrapper for a pre-computed Circom witness.
 ///
-/// This struct holds the witness and implements the ConstraintSynthesizer trait
-/// required by ark-groth16. It doesn't generate actual constraints - those are
-/// already baked into the proving key from the Circom circuit compilation.
+/// The proving key already encodes all constraints from the Circom compilation.
+/// This struct only registers the witness variable assignment in the correct
+/// order so arkworks can perform the MSM operations during proving.
+///
+/// Witness layout (Circom convention):
+///   index 0                         — constant 1
+///   indices 1..=num_public_signals  — public signals
+///   indices (num_public+1)..        — private witness
 pub struct WitnessCircuit {
     pub witness: Vec<Bn254Fr>,
+    pub num_public_signals: usize,
 }
 
 impl ConstraintSynthesizer<Bn254Fr> for WitnessCircuit {
@@ -17,26 +21,14 @@ impl ConstraintSynthesizer<Bn254Fr> for WitnessCircuit {
         self,
         cs: ark_relations::r1cs::ConstraintSystemRef<Bn254Fr>,
     ) -> ark_relations::r1cs::Result<()> {
-        // Mark public inputs (index 0 is always 1, indices 1..n are public)
-        // The exact number depends on the circuit
-        let num_public = if self.witness.len() > 1 {
-            // Estimate based on witness size (conservative)
-            (self.witness.len() / 100).clamp(1, 10)
-        } else {
-            0
-        };
-
-        for i in 0..num_public {
-            if i + 1 < self.witness.len() {
-                let _ = cs.new_input_variable(|| Ok(self.witness[i + 1]))?;
+        for i in 1..=self.num_public_signals {
+            if i < self.witness.len() {
+                let _ = cs.new_input_variable(|| Ok(self.witness[i]))?;
             }
         }
-
-        // Private witness variables
-        for signal in self.witness.iter().skip(num_public + 1) {
+        for signal in self.witness.iter().skip(self.num_public_signals + 1) {
             let _ = cs.new_witness_variable(|| Ok(*signal))?;
         }
-
         Ok(())
     }
 }
@@ -46,7 +38,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_witness_circuit_creation() {
+    fn test_circuit_stores_fields() {
         let witness = vec![
             Bn254Fr::from(1u64),
             Bn254Fr::from(100u64),
@@ -54,14 +46,18 @@ mod tests {
         ];
         let circuit = WitnessCircuit {
             witness: witness.clone(),
+            num_public_signals: 1,
         };
-
         assert_eq!(circuit.witness.len(), 3);
+        assert_eq!(circuit.num_public_signals, 1);
     }
 
     #[test]
-    fn test_witness_circuit_empty() {
-        let circuit = WitnessCircuit { witness: vec![] };
+    fn test_circuit_empty_witness() {
+        let circuit = WitnessCircuit {
+            witness: vec![],
+            num_public_signals: 0,
+        };
         assert_eq!(circuit.witness.len(), 0);
     }
 }
