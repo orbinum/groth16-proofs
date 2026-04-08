@@ -35,22 +35,19 @@ Install from npm:
 npm install @orbinum/groth16-proofs
 ```
 
-You can also download precompiled binaries from [GitHub Releases](https://github.com/orbinum/groth16-proofs/releases).
-
-1. Download `orb-groth16-proof.tar.gz` from the latest release (optional)
-2. Extract to your project (optional):
-```bash
-tar -xzf orb-groth16-proof.tar.gz -C ./wasm
-```
-
-3. Import in TypeScript/JavaScript:
+Import in TypeScript/JavaScript:
 
 ```typescript
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+import init, { compress_snarkjs_proof_wasm } from '@orbinum/groth16-proofs';
+import groth16pkg from '@orbinum/groth16-proofs/package.json';
 
-// numPublicSignals depends on your circuit (check your circuit definition)
-const numPublicSignals = 5;
-const result = generate_proof_from_decimal_wasm(numPublicSignals, witnessJson, provingKeyBytes);
+// Initialize WASM from CDN (recommended — no bundling required)
+const WASM_CDN = `https://unpkg.com/@orbinum/groth16-proofs@${groth16pkg.version}/groth16_proofs_bg.wasm`;
+await init(WASM_CDN);
+
+// Convert snarkjs proof to on-chain arkworks format (128 bytes)
+const compressed = compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
+// compressed => "0x..." (128 bytes)
 ```
 
 ### Development Installation
@@ -72,11 +69,13 @@ wasm-pack --version
 
 ## Building from Source
 
-### Native Binary
+### Native Binaries
 
 ```bash
 make build
-# Output: ./target/release/generate-proof-from-witness
+# Outputs:
+#   ./target/release/generate-proof-from-witness  (Rust-native proof generation)
+#   ./target/release/convert-vk                   (VK JSON → arkworks binary)
 ```
 
 ### WASM Module
@@ -100,14 +99,17 @@ make build-all
 
 ```bash
 cargo build --release
+# Proof generation
 ./target/release/generate-proof-from-witness witness.json proving_key.ark
+# VK format conversion (snarkjs JSON → on-chain arkworks binary)
+./target/release/convert-vk verification_key_unshield.json verification_key_unshield.bin
 ```
 
 **Advantages**:
 - ✅ Fastest proof generation (5-8 seconds)
 - ✅ Direct file I/O access
 - ✅ Deterministic randomness (testable)
-- ✅ Minimal dependencies
+- ✅ `convert-vk` produces 424-byte arkworks binary required by on-chain verifier
 
 ### WASM
 
@@ -139,15 +141,21 @@ Once installed, see the **[Usage Guide](./usage.md)** for:
 **Minimal example**:
 
 ```rust
-// Rust
+// Rust — native proof generation
 use groth16_proofs::generate_proof_from_witness;
-let proof = generate_proof_from_witness(&witness, "key.ark")?;
+let proof = generate_proof_from_witness(&witness_hex, "key.ark")?;
+```
+
+```bash
+# CLI — convert VK for on-chain registration
+./target/release/convert-vk verification_key_unshield.json verification_key_unshield.bin
 ```
 
 ```typescript
-// WASM
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
-const result = generate_proof_from_decimal_wasm(numPublicSignals, witnessJson, keyBytes);
+// WASM — compress snarkjs proof to on-chain format
+import init, { compress_snarkjs_proof_wasm } from '@orbinum/groth16-proofs';
+await init(WASM_CDN);
+const compressed = compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
 ```
 
 ## Configuration
@@ -182,10 +190,13 @@ make install-tools
 
 ### WASM bundle too large
 
-The WASM module is ~3-5 MB (compressed ~1 MB). Consider:
-- Serving over gzip/brotli compression
-- Using code splitting for lazy loading
-- Pre-generating proofs server-side (native)
+The WASM module is ~3-5 MB (compressed ~1 MB). Load from CDN instead of bundling:
+
+```typescript
+import groth16pkg from '@orbinum/groth16-proofs/package.json';
+const WASM_CDN = `https://unpkg.com/@orbinum/groth16-proofs@${groth16pkg.version}/groth16_proofs_bg.wasm`;
+await init(WASM_CDN); // does not bundle the .wasm into your JS bundle
+```
 
 ### Proof generation is slow
 

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/orbinum/groth16-proofs/releases/tag/v2.1.0) - 2026-04-07
+
+### Added
+- `convert-vk` binary: converts a snarkjs `verification_key_*.json` to a
+  ~424-byte arkworks compressed binary (via `CanonicalSerialize::serialize_compressed`).
+  Required for on-chain VK registration — the runtime `ArkVK::deserialize_compressed()`
+  expects binary format, not raw JSON bytes.
+
+### Changed
+- `Makefile` `build` target now builds both `generate-proof-from-witness` and `convert-vk`.
+- Docs updated (`installation.md`, `usage.md`, `witness-formats.md`) to document the
+  current proof flows: CDN WASM init, snarkjs → `compress_snarkjs_proof_wasm` primary
+  path, and `convert-vk` VK registration workflow.
+- CHANGELOG is now maintained manually; removed `cargo-release` from the release workflow.
+
 ## [2.0.0](https://github.com/orbinum/groth16-proofs/releases/tag/v2.0.0) - 2026-02-16
 
 ### Added

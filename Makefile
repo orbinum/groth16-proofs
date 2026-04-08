@@ -53,9 +53,10 @@ check: fmt-check lint ## Check code quality (fmt + clippy)
 
 # Build native binary
 build: ## Build native binary (release)
-	@echo "$(BLUE)Building native binary...$(NC)"
+	@echo "$(BLUE)Building native binaries...$(NC)"
 	cargo build --release
-	@echo "$(GREEN)✓ Binary: ./target/release/generate-proof-from-witness$(NC)"
+	@echo "$(GREEN)✓ generate-proof-from-witness: ./target/release/generate-proof-from-witness$(NC)"
+	@echo "$(GREEN)✓ convert-vk:                  ./target/release/convert-vk$(NC)"
 
 build-debug: ## Build native binary (debug)
 	@echo "$(BLUE)Building native binary (debug)...$(NC)"
