@@ -89,7 +89,8 @@ pub fn compress_snarkjs_proof_wasm(proof_json: &str) -> Result<String, JsValue> 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
-    use ark_ec::AffineRepr;
+    use ark_bn254::{G1Projective, G2Projective};
+    use ark_ec::{CurveGroup, PrimeGroup};
     use ark_ff::BigInteger;
 
     fn fq_to_decimal_string(value: Fq) -> String {
@@ -105,9 +106,9 @@ mod tests {
     }
 
     fn build_valid_snarkjs_proof_json() -> String {
-        let a = G1Affine::generator();
-        let b = G2Affine::generator();
-        let c = G1Affine::generator();
+        let a = G1Projective::generator().into_affine();
+        let b = G2Projective::generator().into_affine();
+        let c = G1Projective::generator().into_affine();
 
         serde_json::json!({
             "pi_a": [
@@ -190,5 +191,50 @@ mod tests {
         assert!(result
             .unwrap_err()
             .contains("Invalid snarkjs proof structure"));
+    }
+
+    #[test]
+    fn test_serde_json_rejects_malformed_proof_input() {
+        // Calling compress_snarkjs_proof_wasm with invalid JSON cannot be done
+        // in native tests because the Err(JsValue) return path from a #[wasm_bindgen]
+        // function triggers a non-unwinding abort via wasm-bindgen internals.
+        // Instead, validate the JSON parsing step directly.
+        let result: Result<SnarkjsProof, _> = serde_json::from_str("not valid json at all {{{{");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_snarkjs_proof_pi_b_no_rows() {
+        let parsed = SnarkjsProof {
+            pi_a: vec!["1".to_string(), "2".to_string()],
+            pi_b: vec![],
+            pi_c: vec!["1".to_string(), "2".to_string()],
+        };
+        let result = validate_snarkjs_proof_structure(&parsed);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("pi_b must be a 2x2 matrix"));
+    }
+
+    #[test]
+    fn test_validate_snarkjs_proof_pi_b_short_rows() {
+        let parsed = SnarkjsProof {
+            pi_a: vec!["1".to_string(), "2".to_string()],
+            pi_b: vec![
+                vec!["1".to_string()], // only 1 element, needs 2
+                vec!["3".to_string(), "4".to_string()],
+            ],
+            pi_c: vec!["1".to_string(), "2".to_string()],
+        };
+        let result = validate_snarkjs_proof_structure(&parsed);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("pi_b must be a 2x2 matrix"));
+    }
+
+    #[test]
+    fn test_compressed_proof_is_128_bytes() {
+        let proof_json = build_valid_snarkjs_proof_json();
+        let compressed_hex = compress_snarkjs_proof_wasm(&proof_json).unwrap();
+        // "0x" prefix + 256 hex chars = 128 bytes
+        assert_eq!(compressed_hex.len(), 2 + 256);
     }
 }

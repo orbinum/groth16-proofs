@@ -39,18 +39,27 @@ The library converts decimal → hex LE internally, so you don't need to worry a
 
 ## Proof Generation Flow
 
+There are two distinct paths depending on your stack:
+
+### Path A: snarkjs → WASM compress (browser / TypeScript — recommended ✅)
+
 ```
-Witness (decimal or hex)
-    ↓ [parse and convert]
+Circuit inputs + circuit.wasm + circuit_pk.zkey
+    ↓ snarkjs.groth16.fullProve()
     ↓
-Field Elements (BN254)
-    + Proving Key (loaded from file/bytes)
-    ↓ [arkworks]
+{ pi_a, pi_b, pi_c }  (snarkjs proof JSON)
+    + compress_snarkjs_proof_wasm()  [WASM]
     ↓
-Groth16 Proof (128 bytes)
-    ↓ [extract]
+0x<128 bytes>  ← submitted on-chain
+```
+
+### Path B: Witness → arkworks native (Rust / CLI)
+
+```
+Witness (hex LE field elements) + proving_key.ark
+    ↓ generate_proof_from_witness()  [Rust]
     ↓
-Proof (hex) + Public Signals (hex array)
+0x<128 bytes>  ← same on-chain format
 ```
 
 ## Native Rust API
@@ -136,16 +145,74 @@ assert_eq!(field_element, Bn254Fr::from(1u64));
 
 ## WASM JavaScript API
 
-### `generate_proof_from_decimal_wasm()` - Recommended ✅
+### Initialization
 
-Generate proof from snarkjs witness (decimal format) - no conversion needed!
+Before calling any WASM function, initialize the module. Load the `.wasm` binary from CDN to avoid bundling it:
+
+```typescript
+import init from '@orbinum/groth16-proofs';
+import groth16pkg from '@orbinum/groth16-proofs/package.json';
+
+const WASM_CDN = `https://unpkg.com/@orbinum/groth16-proofs@${groth16pkg.version}/groth16_proofs_bg.wasm`;
+await init(WASM_CDN);
+```
+
+> Note: CJS interop — if `init` is not a function, look for `init.default`. See [loader.ts in proof-generator](../../proof-generator/src/wasm/loader.ts) for a production example.
+
+---
+
+### `compress_snarkjs_proof_wasm()` — Primary browser function ✅
+
+Convert a snarkjs proof (`pi_a`, `pi_b`, `pi_c`) into the **128-byte arkworks compressed format** expected by the on-chain verifier. This is the main function used in the Orbinum TypeScript stack.
+
+**Signature**:
+```typescript
+function compress_snarkjs_proof_wasm(
+    proofJson: string             // snarkjs proof as JSON string
+): string                        // 0x-prefixed compressed proof (128 bytes)
+```
+
+**Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `proofJson` | string | JSON with `pi_a`, `pi_b`, `pi_c` decimal coordinate arrays |
+
+**Returns**: `"0x..."` — 128-byte arkworks canonical Groth16 proof
+
+**Example**:
+```typescript
+import init, { compress_snarkjs_proof_wasm } from '@orbinum/groth16-proofs';
+import * as snarkjs from 'snarkjs';
+
+await init(WASM_CDN);
+
+// Step 1: Generate proof with snarkjs (uses .wasm circuit + .zkey proving key)
+const { proof: snarkjsProof, publicSignals } = await snarkjs.groth16.fullProve(
+  circuitInputs,
+  'circuit.wasm',        // circuit binary (from CDN or local)
+  'circuit_pk.zkey'      // proving key (NOT .ark — that is Rust-only)
+);
+
+// Step 2: Compress to on-chain format
+const compressedProof = compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
+// compressedProof => "0x..." (128 bytes, arkworks canonical)
+```
+
+> Implementation: `src/wasm/snarkjs_proof.rs`, re-exported from `src/lib.rs`.
+
+---
+
+### `generate_proof_from_decimal_wasm()` — Witness-based alternative
+
+Generate a proof directly from a raw decimal witness + `.ark` proving key bytes. Use this only when you have a pre-computed witness and the `.ark` key available in-browser.
 
 **Signature**:
 ```typescript
 function generate_proof_from_decimal_wasm(
     numPublicSignals: number,    // Number of public signals to extract
     witnessJson: string,         // JSON array of decimal strings
-    provingKeyBytes: Uint8Array  // Binary proving key
+    provingKeyBytes: Uint8Array  // Binary proving key (.ark format)
 ): string                        // JSON output
 ```
 
@@ -154,48 +221,16 @@ function generate_proof_from_decimal_wasm(
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `numPublicSignals` | number | Number of public signals to extract from witness |
-| `witnessJson` | string | JSON string: `'["1", "12345", "67890", ...]'` (decimal) |
-| `provingKeyBytes` | Uint8Array | Binary proving key (from `.ark` file) |
+| `witnessJson` | string | JSON string: `'["1", "12345", ...]'` (decimal) |
+| `provingKeyBytes` | Uint8Array | Binary proving key (`.ark` file bytes) |
 
 **Returns**: JSON string
 ```json
 {
-  "proof": "0x...",                         // 128-byte compressed Groth16 proof
-  "publicSignals": ["0x...", "0x...", ...]  // Public signals as hex
+  "proof": "0x...",
+  "publicSignals": ["0x...", "0x...", ...]
 }
 ```
-
-**Example (with snarkjs)**:
-```typescript
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
-import * as snarkjs from 'snarkjs';
-
-async function generateProof(circuitInputs) {
-  // Step 1: Calculate witness using snarkjs
-  const { witness } = await snarkjs.wtns.calculate(
-    circuitInputs,
-    'circuit.wasm',
-    'witness.wtns'
-  );
-  
-  // Step 2: Export witness as array (already in decimal format!)
-  const witnessArray = await snarkjs.wtns.exportJson('witness.wtns');
-  
-  // Step 3: Load proving key
-  const provingKey = await fetch('circuit_pk.ark')
-    .then(r => r.arrayBuffer())
-    .then(b => new Uint8Array(b));
-  
-  // Step 4: Generate proof (pass witness directly!)
-  const resultJson = generate_proof_from_decimal_wasm(
-    5,  // number of public signals
-    JSON.stringify(witnessArray),  // No conversion needed!
-    provingKey
-  );
-  
-  const { proof, publicSignals } = JSON.parse(resultJson);
-  return { proof, publicSignals };
-}
 ```
 
 ### `compress_snarkjs_proof_wasm()` - Interoperability
@@ -243,6 +278,42 @@ Initialize panic handling for better browser error messages. Usually called auto
 function initPanicHook(): void
 ```
 
+---
+
+## CLI Binaries
+
+### `convert-vk` — VK format conversion
+
+Converts a snarkjs verification key JSON to the **arkworks compressed binary** (~424 bytes) required by the on-chain verifier. Run this once per circuit before registering keys on-chain.
+
+**Usage**:
+```bash
+./target/release/convert-vk <input_vk.json> [output_vk.bin]
+# If output is omitted, replaces .json with .bin
+```
+
+**Example**:
+```bash
+./target/release/convert-vk artifacts/verification_key_unshield.json verification_key_unshield.bin
+# stderr: Converted ... → ... (3657 bytes JSON → 424 bytes binary)
+```
+
+**VK artifact sizes**:
+| Format | Extension | Size | Used by |
+|--------|-----------|------|---------|
+| snarkjs JSON | `verification_key_*.json` | ~3.6 KB | input to `convert-vk` |
+| arkworks binary | `*.bin` | ~424 bytes | on-chain registration |
+
+> The `setup-dev.sh` and `rotate-dev.sh` scripts in the node repo auto-compile `convert-vk` and run it before VK registration. Do not register JSON bytes directly — the runtime deserializer expects arkworks compressed binary.
+
+### `generate-proof-from-witness` — Rust-native CLI
+
+```bash
+./target/release/generate-proof-from-witness <witness.json> <proving_key.ark>
+```
+
+Outputs the 128-byte compressed proof to stdout as hex. The witness JSON must be an array of hex LE field elements (see [witness-formats.md](./witness-formats.md)).
+
 ## Complete Examples
 
 ### Rust Example
@@ -266,68 +337,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Browser Example
+### Browser Example (snarkjs + compress — Recommended ✅)
 
 ```typescript
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+import init, { compress_snarkjs_proof_wasm } from '@orbinum/groth16-proofs';
+import groth16pkg from '@orbinum/groth16-proofs/package.json';
+import * as snarkjs from 'snarkjs';
 
-async function generateProof() {
-  // Load witness data
-  const witness = [
-    "1",
-    "2",
-    // ... more elements
-  ];
-  
-  // Load proving key
-  const response = await fetch('proving_keys/my_circuit.ark');
-  const provingKeyBytes = new Uint8Array(await response.arrayBuffer());
-  
-  // Specify number of public signals for your circuit
-  const numPublicSignals = 5; // Depends on your circuit definition
-  
-  try {
-    const resultJson = generate_proof_from_decimal_wasm(
-      numPublicSignals,
-      JSON.stringify(witness),
-      provingKeyBytes
-    );
-    
-    const { proof, publicSignals } = JSON.parse(resultJson);
-    console.log('✓ Proof:', proof);
-    console.log('✓ Public signals:', publicSignals);
-    
-    return { proof, publicSignals };
-  } catch (error) {
-    console.error('✗ Generation failed:', error);
-    throw error;
-  }
+async function generateUnshieldProof(inputs: Record<string, unknown>) {
+  // 1. Initialize WASM from CDN
+  const WASM_CDN = `https://unpkg.com/@orbinum/groth16-proofs@${groth16pkg.version}/groth16_proofs_bg.wasm`;
+  await init(WASM_CDN);
+
+  // 2. Generate proof with snarkjs (.zkey from CDN)
+  const { proof: snarkjsProof } = await snarkjs.groth16.fullProve(
+    inputs,
+    'https://cdn.example.com/circuits/unshield.wasm',
+    'https://cdn.example.com/circuits/unshield_pk.zkey'
+  );
+
+  // 3. Compress to 128-byte on-chain format
+  const compressedProof = compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
+  console.log('✓ Proof:', compressedProof); // "0x..." 128 bytes
+  return compressedProof;
 }
 ```
 
 ### Node.js Example
 
 ```typescript
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
-import fs from 'fs';
+import init, { compress_snarkjs_proof_wasm } from '@orbinum/groth16-proofs';
+import groth16pkg from '@orbinum/groth16-proofs/package.json';
+import { readFileSync } from 'fs';
+import * as snarkjs from 'snarkjs';
 
-function generateProofFromFile(circuitName: string, witnessPath: string) {
-  // Load witness and proving key
-  const witness = JSON.parse(fs.readFileSync(witnessPath, 'utf-8'));
-  const provingKey = fs.readFileSync(`circuits/${circuitName}_pk.ark`);
-  
-  // Configure based on your circuit
-  // You need to know how many public signals your circuit has
-  const numPublicSignals = 5;
-  
-  const result = generate_proof_from_decimal_wasm(
-    numPublicSignals,
-    JSON.stringify(witness),
-    new Uint8Array(provingKey)
+async function generateProofNode(circuitName: string, inputs: unknown) {
+  // Initialize WASM
+  const wasmBytes = readFileSync(`./circuits/${circuitName}_bg.wasm`);
+  await init(wasmBytes);
+
+  // Generate with snarkjs
+  const { proof: snarkjsProof } = await snarkjs.groth16.fullProve(
+    inputs,
+    `./circuits/${circuitName}.wasm`,
+    `./circuits/${circuitName}_pk.zkey`
   );
-  
-  const { proof, publicSignals } = JSON.parse(result);
-  return { proof, publicSignals };
+
+  return compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
 }
 ```
 

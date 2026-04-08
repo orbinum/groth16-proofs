@@ -107,4 +107,27 @@ mod tests {
 
         assert_eq!(EXPECTED_COMPRESSED_PROOF_SIZE, 128);
     }
+
+    #[test]
+    fn test_generate_proof_invalid_hex_in_witness() {
+        use std::io::Write;
+
+        // Create a valid (but trivially wrong) proving key file so the read succeeds
+        // and we reach the hex-parsing step.
+        let temp_file = "/tmp/dummy_pk_for_hex_test.ark";
+        {
+            let mut f = std::fs::File::create(temp_file).unwrap();
+            f.write_all(b"dummy").unwrap();
+        }
+
+        let witness_hex = vec!["0xGGGGGGGG".to_string()];
+        let result = generate_proof_from_witness(&witness_hex, temp_file);
+
+        let _ = std::fs::remove_file(temp_file);
+
+        // The hex decode happens before the key is read in the current impl,
+        // so this returns a hex-parse error OR a key-deserialize error.
+        // Either way it must be an error.
+        assert!(result.is_err());
+    }
 }

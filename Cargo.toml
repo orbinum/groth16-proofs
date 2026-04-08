@@ -1,6 +1,6 @@
 [package]
 name = "groth16-proofs"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 license = "Apache-2.0 OR GPL-3.0-or-later"
 description = "High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol"
@@ -19,6 +19,14 @@ wasm-opt = true
 [[bin]]
 name = "generate-proof-from-witness"
 path = "src/bin/generate-proof-from-witness.rs"
+
+[[bin]]
+name = "bench-groth16"
+path = "src/bin/bench_groth16.rs"
+
+[[bin]]
+name = "convert-vk"
+path = "src/bin/convert_vk.rs"
 
 [dependencies]
 # Arkworks dependencies

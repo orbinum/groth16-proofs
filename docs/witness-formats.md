@@ -1,30 +1,76 @@
-# Witness Formats Guide
+# Input Formats Guide
 
-This document explains the different witness formats supported by groth16-proofs and when to use each one.
+This document explains the different input formats accepted by groth16-proofs functions and when to use each one.
 
 ## Overview
 
-**groth16-proofs** uses decimal witness format for WASM proof generation:
+The library exposes two conceptually different entry points:
 
-1. **Decimal Format** (Recommended) - Native snarkjs output
-2. **Hex Little-Endian Format** - Utility conversion format for low-level Rust helpers
+| Entry point | Input | Output | Use case |
+|-------------|-------|--------|----------|
+| `compress_snarkjs_proof_wasm` | snarkjs proof JSON `{pi_a, pi_b, pi_c}` | 128-byte compressed proof | Browser / TS stack ✅ |
+| `generate_proof_from_decimal_wasm` | Decimal witness array + `.ark` key | 128-byte compressed proof | WASM with server-side `.ark` |
+| `generate_proof_from_witness` (Rust/CLI) | Hex LE witness array + `.ark` path | 128-byte compressed proof | Rust-native / CLI |
+
+> **Important**: `compress_snarkjs_proof_wasm` does **not** receive a witness — it receives a proof that snarkjs already generated. The witness is consumed internally by `snarkjs.groth16.fullProve()`.
+
+---
 
 ## Format Comparison
 
+### Witness formats (for `generate_proof_from_decimal_wasm` and `generate_proof_from_witness` CLI)
+
 | Aspect | Decimal Format | Hex LE Format |
 |--------|----------------|---------------|
-| **Source** | snarkjs native | Custom conversion |
+| **Source** | snarkjs witness export | Custom / Rust internal |
 | **Example** | `"12345"` | `"0x3930000000...00"` |
 | **Conversion needed** | ❌ No | ✅ Yes |
 | **Function (Rust)** | `decimal_to_field()` | `hex_to_field()` |
 | **Function (WASM)** | `generate_proof_from_decimal_wasm()` | N/A |
-| **Use case** | Modern integrations | Legacy code |
+| **Use case** | WASM witness-based flow | Rust CLI (`generate-proof-from-witness`) |
 
-## 1. Decimal Format (Recommended ✅)
+## 1. snarkjs Proof Format (for `compress_snarkjs_proof_wasm` — Primary ✅)
 
 ### What is it?
 
-The **native format** used by snarkjs when exporting witness. Each field element is represented as a decimal string.
+The JSON output of `snarkjs.groth16.fullProve()` containing elliptic curve points `pi_a`, `pi_b`, `pi_c`. This is what the primary Orbinum TypeScript flow sends to `compress_snarkjs_proof_wasm`.
+
+### Example
+
+```json
+{
+  "pi_a": ["123456...789", "987654...321", "1"],
+  "pi_b": [
+    ["111...", "222..."],
+    ["333...", "444..."]
+    ["1", "0"]
+  ],
+  "pi_c": ["555...", "666...", "1"]
+}
+```
+
+### How to use
+
+```typescript
+import init, { compress_snarkjs_proof_wasm } from '@orbinum/groth16-proofs';
+import * as snarkjs from 'snarkjs';
+
+await init(WASM_CDN);
+
+const { proof: snarkjsProof } = await snarkjs.groth16.fullProve(
+  inputs,
+  circuitWasmUrl,
+  circuitZkeyUrl
+);
+
+// snarkjsProof already has the right format — pass directly
+const compressedProof = compress_snarkjs_proof_wasm(JSON.stringify(snarkjsProof));
+// => "0x..." (128 bytes on-chain format)
+```
+
+---
+
+## 2. Decimal Witness Format (for `generate_proof_from_decimal_wasm`)
 
 ### Example
 
@@ -39,51 +85,46 @@ The **native format** used by snarkjs when exporting witness. Each field element
 
 ### Why use it?
 
-- ✅ **No conversion overhead**: Direct from snarkjs → groth16-proofs
+- ✅ **No conversion overhead**: Direct from snarkjs witness export
 - ✅ **Simpler code**: Less data transformation
 - ✅ **Human-readable**: Easy to debug
-- ✅ **Standard**: Works with any ZK toolkit
 
 ### How to use
 
 **WASM (JavaScript/TypeScript)**:
 ```typescript
-import { generate_proof_from_decimal_wasm } from './wasm/groth16_proofs.js';
+import { generate_proof_from_decimal_wasm } from '@orbinum/groth16-proofs';
 import * as snarkjs from 'snarkjs';
 
-// Step 1: Calculate witness
+// Export witness as decimal array
 await snarkjs.wtns.calculate(inputs, 'circuit.wasm', 'witness.wtns');
-
-// Step 2: Export as JSON (decimal format - native!)
 const witnessArray = await snarkjs.wtns.exportJson('witness.wtns');
 
-// Step 3: Generate proof (no conversion!)
+// Load .ark proving key (Rust format — NOT .zkey)
+const provingKey = new Uint8Array(await fetch('circuit_pk.ark').then(r => r.arrayBuffer()));
+
 const resultJson = generate_proof_from_decimal_wasm(
   5,  // number of public signals
-  JSON.stringify(witnessArray),  // Pass directly
-  provingKeyBytes
+  JSON.stringify(witnessArray),
+  provingKey
 );
+const { proof, publicSignals } = JSON.parse(resultJson);
 ```
 
 **Rust**:
 ```rust
 use groth16_proofs::decimal_to_field;
 
-// Convert individual decimal string to field element
 let field = decimal_to_field("12345")?;
-
-// Or convert entire witness array
-let witness: Vec<Bn254Fr> = decimal_strings
-    .iter()
-    .map(|s| decimal_to_field(s))
-    .collect::<Result<Vec<_>, _>>()?;
 ```
 
-## 2. Hex Little-Endian Format (Utility / Rust)
+---
+
+## 3. Hex Little-Endian Format (for `generate_proof_from_witness` CLI)
 
 ### What is it?
 
-A **custom format** where each field element is a 32-byte hex string in little-endian byte order.
+A **32-byte hex string in little-endian order** used by the `generate-proof-from-witness` CLI and the Rust `generate_proof_from_witness()` function. The binary format matches arkworks' internal BN254 field element representation.
 
 ### Example
 
@@ -126,10 +167,15 @@ Reverse bytes (LE): 0x3930000000...0000
 
 ### How to use
 
+**CLI**:
+```bash
+# witness.json is an array of hex LE strings
+./target/release/generate-proof-from-witness witness.json proving_key.ark
+```
+
 **WASM (JavaScript/TypeScript)**:
 
-Use `generate_proof_from_decimal_wasm()` with decimal witness exported by snarkjs.
-Hex LE is not accepted by the WASM proof-generation API.
+Hex LE is not accepted by the WASM proof-generation API. Use decimal witness with `generate_proof_from_decimal_wasm`, or snarkjs proof JSON with `compress_snarkjs_proof_wasm`.
 
 **Rust**:
 ```rust
@@ -137,6 +183,8 @@ use groth16_proofs::hex_to_field;
 
 let field = hex_to_field("0x0100...00")?;
 ```
+
+---
 
 ## Converting Between Formats
 
@@ -179,19 +227,26 @@ function hexLEToDecimal(hexLE: string): string {
 }
 ```
 
-## Which Format Should I Use?
+## Which Input Should I Use?
 
-### Use Decimal Format ✅ if:
+### Use `compress_snarkjs_proof_wasm` ✅ if:
 
-- ✅ You're using snarkjs for witness calculation
-- ✅ Starting a new integration
-- ✅ Want simplest possible code
-- ✅ Need human-readable values for debugging
+- You're in a browser / TypeScript app
+- You use `snarkjs.groth16.fullProve()` (standard Orbinum flow)
+- You have `pi_a`, `pi_b`, `pi_c` from snarkjs
+- You want the 128-byte on-chain format
 
-### Use Hex LE Format if:
+### Use `generate_proof_from_decimal_wasm` if:
 
-- You need low-level conversion utilities in Rust
-- You are working with internal field-level tooling
+- You have a pre-computed decimal witness array
+- You have the `.ark` proving key available (server-hosted)
+- You want to generate the proof directly (no snarkjs step)
+
+### Use `generate_proof_from_witness` CLI if:
+
+- You are on a Rust/server environment
+- You have hex LE witness + `.ark` proving key file
+- You want the fastest native proof generation
 
 ## Technical Details
 

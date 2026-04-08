@@ -160,4 +160,32 @@ mod tests {
         assert_eq!(witness[1], Bn254Fr::from(2u64));
         assert_eq!(witness[2], Bn254Fr::from(3u64));
     }
+
+    #[test]
+    fn test_decimal_hex_consistency() {
+        // decimal_to_field and hex_to_field must produce the same field element
+        // for the same numeric value.
+        let decimal = decimal_to_field("12345").unwrap();
+        let hex =
+            hex_to_field("0x3930000000000000000000000000000000000000000000000000000000000000")
+                .unwrap();
+        assert_eq!(decimal, hex);
+    }
+
+    #[test]
+    fn test_decimal_to_field_empty_string() {
+        let result = decimal_to_field("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Failed to parse decimal string"));
+    }
+
+    #[test]
+    fn test_decimal_to_field_leading_zeros() {
+        // "0001" should parse the same as "1"
+        let a = decimal_to_field("0001").unwrap();
+        let b = decimal_to_field("1").unwrap();
+        assert_eq!(a, b);
+    }
 }
