@@ -25,9 +25,11 @@ The library exposes two conceptually different entry points:
 | **Source** | snarkjs witness export | Custom / Rust internal |
 | **Example** | `"12345"` | `"0x3930000000...00"` |
 | **Conversion needed** | ❌ No | ✅ Yes |
-| **Function (Rust)** | `decimal_to_field()` | `hex_to_field()` |
+| **Function (Rust)** | `from_decimal_str::<F>()` / `decimal_to_field()` ¹ | `from_hex_le::<F>()` / `hex_to_field()` ¹ |
 | **Function (WASM)** | `generate_proof_from_decimal_wasm()` | N/A |
 | **Use case** | WASM witness-based flow | Rust CLI (`generate-proof-from-witness`) |
+
+¹ `decimal_to_field` and `hex_to_field` are backward-compat shims for `from_decimal_str::<Bn254Fr>` and `from_hex_le::<Bn254Fr>`. Prefer the generic versions for new code.
 
 ## 1. snarkjs Proof Format (for `compress_snarkjs_proof_wasm` — Primary ✅)
 

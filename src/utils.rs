@@ -1,48 +1,14 @@
-//! Utility functions for proof generation
-
+// Backward-compatible shims for decimal_to_field and hex_to_field.
+// Logic lives in field.rs as generic functions.
+use crate::field::{from_decimal_str, from_hex_le};
 use ark_bn254::Fr as Bn254Fr;
-use ark_ff::PrimeField;
-use num_bigint::BigUint;
 
-/// Convert decimal string to field element (snarkjs format)
-///
-/// Accepts decimal string representation of field element (e.g., "123456")
-/// This is the native format used by snarkjs witness output.
-pub fn decimal_to_field(decimal_str: &str) -> Result<Bn254Fr, String> {
-    // Parse as BigUint
-    let big_uint = BigUint::parse_bytes(decimal_str.as_bytes(), 10)
-        .ok_or_else(|| format!("Failed to parse decimal string: {}", decimal_str))?;
-
-    // Convert to bytes (little-endian for arkworks)
-    let bytes = big_uint.to_bytes_le();
-
-    // Convert to field element (with modular reduction)
-    Ok(Bn254Fr::from_le_bytes_mod_order(&bytes))
+pub fn decimal_to_field(s: &str) -> Result<Bn254Fr, String> {
+    from_decimal_str::<Bn254Fr>(s)
 }
 
-/// Convert hex string to field element
-///
-/// Expects little-endian hex string (0x + 64 hex chars)
-pub fn hex_to_field(hex_str: &str) -> Result<Bn254Fr, String> {
-    // Remove 0x prefix if present
-    let hex_clean = if let Some(stripped) = hex_str.strip_prefix("0x") {
-        stripped
-    } else {
-        hex_str
-    };
-
-    // Pad to 64 chars if needed (handles odd-length hex)
-    let hex_padded = if hex_clean.len() % 2 == 1 {
-        format!("0{hex_clean}")
-    } else {
-        hex_clean.to_string()
-    };
-
-    // Decode hex to bytes (little-endian)
-    let bytes = hex::decode(&hex_padded).map_err(|e| format!("Failed to decode hex: {e}"))?;
-
-    // Convert to field element (arkworks expects little-endian)
-    Ok(Bn254Fr::from_le_bytes_mod_order(&bytes))
+pub fn hex_to_field(hex: &str) -> Result<Bn254Fr, String> {
+    from_hex_le::<Bn254Fr>(hex)
 }
 
 #[cfg(test)]

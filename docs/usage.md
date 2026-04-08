@@ -73,16 +73,18 @@ Generate a Groth16 proof from witness data.
 pub fn generate_proof_from_witness(
     witness_hex: &[String],
     proving_key_path: &str,
-) -> Result<Vec<u8>, String>
+    num_public_signals: usize,
+) -> Result<Vec<u8>, ProofError>
 ```
 
 **Arguments**:
-- `witness_hex`: Array of hex-encoded field elements (little-endian), typically 11,808 elements
+- `witness_hex`: Array of hex-encoded field elements (little-endian, 32 bytes each)
 - `proving_key_path`: Path to the `.ark` proving key file
+- `num_public_signals`: Number of public signals (must be 1–(witness\_len-1))
 
 **Returns**:
 - `Ok(Vec<u8>)`: 128-byte compressed Groth16 proof
-- `Err(String)`: Error message
+- `Err(ProofError)`: Typed error — see [`ProofError`](#proofError)
 
 **Example**:
 ```rust
@@ -95,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ... 11,806 more elements
     ];
     
-    let proof = generate_proof_from_witness(&witness, "circuits/my_circuit_pk.ark")?;
+    let proof = generate_proof_from_witness(&witness, "circuits/my_circuit_pk.ark", 5)?;
     println!("Proof: 0x{}", hex::encode(&proof));
     
     Ok(())
@@ -105,6 +107,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### `decimal_to_field()`
 
 Convert a decimal string (snarkjs format) to a BN254 field element.
+
+> **Backward-compat shim** for `from_decimal_str::<Bn254Fr>()`. Prefer `from_decimal_str` for new generic code.
 
 **Signature**:
 ```rust
@@ -126,6 +130,8 @@ assert_eq!(field_element, Bn254Fr::from(12345u64));
 
 Convert a hex string (little-endian) to a BN254 field element.
 
+> **Backward-compat shim** for `from_hex_le::<Bn254Fr>()`. Prefer `from_hex_le` for new generic code.
+
 **Signature**:
 ```rust
 pub fn hex_to_field(hex_str: &str) -> Result<Bn254Fr, String>
@@ -142,6 +148,99 @@ use groth16_proofs::hex_to_field;
 let field_element = hex_to_field("0x0100000000000000000000000000000000000000000000000000000000000000")?;
 assert_eq!(field_element, Bn254Fr::from(1u64));
 ```
+
+### `from_decimal_str<F>()`
+
+Generic decimal string parser for any `PrimeField` element. Underlying function used by `decimal_to_field`.
+
+**Signature**:
+```rust
+pub fn from_decimal_str<F: PrimeField>(s: &str) -> Result<F, String>
+```
+
+**Example**:
+```rust
+use groth16_proofs::from_decimal_str;
+use ark_bn254::{Fr as Bn254Fr, Fq};
+
+let fr: Bn254Fr = from_decimal_str("12345").unwrap();
+let fq: Fq      = from_decimal_str("12345").unwrap(); // same string, different field
+```
+
+### `from_hex_le<F>()`
+
+Generic little-endian hex parser for any `PrimeField` element. Underlying function used by `hex_to_field`.
+
+**Signature**:
+```rust
+pub fn from_hex_le<F: PrimeField>(hex: &str) -> Result<F, String>
+```
+
+**Example**:
+```rust
+use groth16_proofs::from_hex_le;
+use ark_bn254::Fr as Bn254Fr;
+
+let val: Bn254Fr = from_hex_le("0x0100000000000000000000000000000000000000000000000000000000000000").unwrap();
+```
+
+### `prove_from_witness()`
+
+Core prover shared by the native and WASM paths. Use this when you have already loaded the proving key bytes and converted the witness to field elements.
+
+**Signature**:
+```rust
+pub fn prove_from_witness(
+    pk_bytes: &[u8],
+    witness: Vec<Bn254Fr>,
+    num_public_signals: usize,
+) -> Result<Vec<u8>, ProofError>
+```
+
+**Example**:
+```rust
+use groth16_proofs::{prove_from_witness, from_hex_le};
+use ark_bn254::Fr as Bn254Fr;
+
+let pk_bytes = std::fs::read("circuit_pk.ark").unwrap();
+let witness: Vec<Bn254Fr> = hex_strings.iter()
+    .map(|h| from_hex_le(h).unwrap())
+    .collect();
+let proof_bytes = prove_from_witness(&pk_bytes, witness, 5).unwrap();
+```
+
+### `compress_snarkjs_proof()`
+
+Native (non-WASM) version of the snarkjs compression function. Available in server-side Rust code.
+
+**Signature**:
+```rust
+pub fn compress_snarkjs_proof(proof_json: &str) -> Result<Vec<u8>, ProofError>
+```
+
+**Example**:
+```rust
+use groth16_proofs::compress_snarkjs_proof;
+
+let proof_bytes = compress_snarkjs_proof(&snarkjs_proof_json_string).unwrap();
+// proof_bytes.len() == 128
+```
+
+### `ProofError`
+
+Unified error type returned by all Rust proof functions.
+
+| Variant | Description |
+|---------|-------------|
+| `WitnessEmpty` | The witness vector is empty |
+| `WitnessConversion(String)` | Failed to convert a witness element |
+| `ProvingKeyIo(String)` | Failed to read the `.ark` file |
+| `ProvingKeyParse(String)` | Failed to deserialize the proving key |
+| `ProveGeneration(String)` | arkworks proof generation failed |
+| `ProofSerialization(String)` | Failed to serialize the proof |
+| `NumPublicSignals(String)` | Invalid `num_public_signals` value |
+| `WitnessJsonParse(String)` | Failed to parse witness JSON |
+| `SnarkjsProofParse(String)` | Failed to parse snarkjs proof JSON |
 
 ## WASM JavaScript API
 
@@ -233,42 +332,6 @@ function generate_proof_from_decimal_wasm(
 ```
 ```
 
-### `compress_snarkjs_proof_wasm()` - Interoperability
-
-Convert a proof generated by snarkjs (`pi_a`, `pi_b`, `pi_c`) into arkworks
-canonical compressed bytes (same format expected by runtime integrations).
-
-**Signature**:
-```typescript
-function compress_snarkjs_proof_wasm(
-    proofJson: string             // snarkjs proof as JSON string
-): string                        // 0x-prefixed compressed proof
-```
-
-**Parameters**:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `proofJson` | string | JSON string with `pi_a`, `pi_b`, `pi_c` decimal coordinates |
-
-**Returns**: Hex string (`0x...`) of compressed Groth16 proof (128 bytes)
-
-**Example**:
-```typescript
-import { compress_snarkjs_proof_wasm } from './wasm/groth16_proofs.js';
-
-const snarkjsProofJson = JSON.stringify({
-  pi_a: ["...", "...", "1"],
-  pi_b: [["...", "..."], ["...", "..."], ["1", "0"]],
-  pi_c: ["...", "...", "1"],
-});
-
-const compressedProof = compress_snarkjs_proof_wasm(snarkjsProofJson);
-// compressedProof => "0x..." (128-byte arkworks canonical proof)
-```
-
-> Note: Internally, this interoperability path is implemented in `src/wasm/snarkjs_proof.rs` and re-exported by `src/wasm.rs` and `src/lib.rs`.
-
 ### `initPanicHook()`
 
 Initialize panic handling for better browser error messages. Usually called automatically.
@@ -309,28 +372,32 @@ Converts a snarkjs verification key JSON to the **arkworks compressed binary** (
 ### `generate-proof-from-witness` — Rust-native CLI
 
 ```bash
-./target/release/generate-proof-from-witness <witness.json> <proving_key.ark>
+./target/release/generate-proof-from-witness <witness.json> <proving_key.ark> [num_public_signals]
 ```
 
-Outputs the 128-byte compressed proof to stdout as hex. The witness JSON must be an array of hex LE field elements (see [witness-formats.md](./witness-formats.md)).
+- `witness.json`: JSON array of hex LE strings (`0x...`, 32 bytes each), or a JSON object `{"witness": [...], "num_public_signals": 5}`
+- `proving_key.ark`: arkworks compressed proving key (`.ark` format)
+- `num_public_signals`: optional CLI override; defaults to the value in JSON or `5`
+
+Outputs proof and public signals as JSON to stdout (see [witness-formats.md](./witness-formats.md)).
 
 ## Complete Examples
 
 ### Rust Example
 
 ```rust
-use groth16_proofs::generate_proof_from_witness;
+use groth16_proofs::{generate_proof_from_witness, ProofError};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), ProofError> {
     // Prepare witness (hex-encoded field elements)
     let witness = vec![
         "0x0100000000000000000000000000000000000000000000000000000000000000".to_string(),
         "0x0200000000000000000000000000000000000000000000000000000000000000".to_string(),
-        // ... more elements (typically ~11,808 total)
+        // ... more elements (typically ~11,808 total for unshield/transfer)
     ];
     
-    // Generate proof
-    let proof_bytes = generate_proof_from_witness(&witness, "circuits/my_circuit_pk.ark")?;
+    // Generate proof — 5 public signals for this circuit
+    let proof_bytes = generate_proof_from_witness(&witness, "circuits/my_circuit_pk.ark", 5)?;
     
     println!("Proof (128 bytes): 0x{}", hex::encode(&proof_bytes));
     Ok(())
@@ -424,16 +491,27 @@ Decimal field elements (snarkjs native output):
 ### Rust Errors
 
 ```rust
-match generate_proof_from_witness(&witness, "key.ark") {
-    Ok(proof) => println!("Success: {}", hex::encode(&proof)),
-    Err(e) => eprintln!("Error: {}", e),
+use groth16_proofs::{generate_proof_from_witness, ProofError};
+
+match generate_proof_from_witness(&witness, "key.ark", 5) {
+    Ok(proof)                        => println!("0x{}", hex::encode(&proof)),
+    Err(ProofError::ProvingKeyIo(e))  => eprintln!("Key file not found: {e}"),
+    Err(ProofError::ProvingKeyParse(e))=> eprintln!("Invalid key format: {e}"),
+    Err(ProofError::NumPublicSignals(e))=> eprintln!("Bad num_public_signals: {e}"),
+    Err(e)                           => eprintln!("Proof failed: {e}"),
 }
 ```
 
-**Common Errors**:
-- `"Failed to read proving key: No such file or directory"`
-- `"Failed to deserialize proving key: ..."`
-- `"Failed to generate proof: Circuit constraint violation"`
+**Error variants**:
+
+| Variant | When it occurs |
+|---------|----------------|
+| `WitnessEmpty` | Witness vector is empty |
+| `WitnessConversion` | Hex LE string cannot be parsed |
+| `ProvingKeyIo` | `.ark` file cannot be read |
+| `ProvingKeyParse` | `.ark` bytes are not a valid proving key |
+| `ProveGeneration` | arkworks constraint violation |
+| `NumPublicSignals` | `0` or `>= witness.len()` |
 
 ### JavaScript Errors
 

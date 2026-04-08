@@ -20,7 +20,7 @@ npm install @orbinum/groth16-proofs
 **Rust** (Native binary):
 ```toml
 [dependencies]
-groth16-proofs = "2.0"
+groth16-proofs = "2.2"
 ```
 
 ### Use
@@ -63,7 +63,7 @@ let proof = generate_proof_from_witness(&witness, "proving_key.ark")?;
 
 This crate generates **128-byte compressed Groth16 proofs** from witness data using the arkworks library. It supports:
 
-- **Performance**: ~5-8 seconds per proof
+- **Performance**: ~1.6–1.8s WASM (small circuits, post-warmup); native Rust faster
 - **Curves**: BN254 (Ethereum-compatible)
 - **Targets**: Native (Rust) + WebAssembly
 - **Circuits**: Unshield, Transfer, Disclosure
@@ -115,7 +115,7 @@ canonical compressed proof bytes (`0x...`, 128 bytes).
 ## Features
 
 ✅ **Multiple Targets**: Native + WASM  
-✅ **Fast**: 5-8 second proof generation  
+✅ **Fast**: ~1.6–1.8s WASM (post-warmup); native Rust faster  
 ✅ **WASM Decimal-Only API**: Direct snarkjs witness input  
 ✅ **Type-Safe**: Memory-safe cryptography  
 ✅ **Well-Tested**: 21+ tests included  
@@ -142,18 +142,6 @@ See [Makefile](./Makefile) for all available targets.
 - [**Usage Guide**](./docs/usage.md) - Complete API reference with examples
 - [**Witness Formats**](./docs/witness-formats.md) - Decimal witness flow and format notes
 - [**Release Process**](./docs/release.md) - How releases are managed
-
-## Performance
-
-| Metric | Value |
-|--------|-------|
-| Proof Size | 128 bytes (compressed) |
-| Generation Time | 5-8 seconds |
-| Curve | BN254 |
-| WASM Bundle | 3-5 MB |
-| Native Binary | 10-15 MB |
-
-**Native is 20-30% faster than WASM**. Choose based on your deployment target.
 
 ## Publishing
 

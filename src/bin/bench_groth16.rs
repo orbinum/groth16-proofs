@@ -89,7 +89,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 4 {
         eprintln!(
-            "Usage: bench-groth16 <circuit_name> <witness.wtns> <proving_key.ark> [iterations=5]"
+            "Usage: bench-groth16 <circuit_name> <witness.wtns> <proving_key.ark> [iterations=5] [num_public=5]"
         );
         std::process::exit(1);
     }
@@ -97,6 +97,7 @@ fn main() {
     let witness_path = &args[2];
     let pk_path = &args[3];
     let iterations: u32 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(5);
+    let num_public: usize = args.get(5).and_then(|s| s.parse().ok()).unwrap_or(5);
 
     eprintln!("Loading witness from {witness_path}...");
     let witness = load_witness(witness_path);
@@ -115,6 +116,7 @@ fn main() {
     for i in 0..iterations {
         let circuit = WitnessCircuit {
             witness: witness.clone(),
+            num_public_signals: num_public,
         };
         let t0 = Instant::now();
         let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng)
