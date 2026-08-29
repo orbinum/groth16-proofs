@@ -1,13 +1,17 @@
 [package]
 name = "groth16-proofs"
-version = "3.0.0"
+version = "4.0.0"
 edition = "2021"
-license = "Apache-2.0 OR GPL-3.0-or-later"
+license = "GPL-3.0-or-later"
 description = "High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol"
 repository = "https://github.com/orbinum/groth16-proofs"
 homepage = "https://github.com/orbinum/groth16-proofs"
 authors = ["Orbinum"]
 keywords = ["zk-snark", "groth16", "proof-generation", "arkworks", "privacy"]
+# crates.io slugs, not free text. Not "no-std": this crate uses std throughout
+# (std::io in the parsers, StdRng::from_entropy in the prover), and the registry
+# category is a claim a reader would act on.
+categories = ["cryptography", "wasm"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -17,16 +21,20 @@ crate-type = ["cdylib", "rlib"]
 wasm-opt = true
 
 [[bin]]
-name = "generate-proof-from-witness"
-path = "src/bin/generate-proof-from-witness.rs"
+name = "pack-verifying-key"
+path = "src/bin/pack_verifying_key.rs"
 
 [[bin]]
-name = "bench-groth16"
-path = "src/bin/bench_groth16.rs"
+name = "verify-proof"
+path = "src/bin/verify_proof.rs"
 
 [[bin]]
-name = "convert-vk"
-path = "src/bin/convert_vk.rs"
+name = "pack-proving-key"
+path = "src/bin/pack_proving_key.rs"
+
+[[bin]]
+name = "bench-circom"
+path = "src/bin/bench_circom.rs"
 
 [dependencies]
 # Arkworks dependencies
@@ -34,7 +42,11 @@ ark-bn254 = "0.5.0"
 ark-ec = "0.5.0"
 ark-ff = "0.5.0"
 ark-groth16 = "0.5.0"
+ark-poly = "0.5.0"
 ark-relations = "0.5.0"
+# Used by src/vendor/zkey.rs, not by this crate's own code.
+byteorder = "1.5"
+num-traits = "0.2"
 ark-serialize = "0.5.0"
 ark-snark = "0.5.0"
 ark-std = "0.5.0"
@@ -43,19 +55,39 @@ ark-std = "0.5.0"
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand = "0.8"
 num-bigint = "0.4"
 
+# Not called directly, but its presence enables the feature that gives ark-std's
+# StdRng a `from_entropy` constructor. Removing it as "unused" costs the prover
+# its entropy source — the blinding factors r and s must not be predictable.
+rand = "0.8"
+
 # WASM support
+#
+# getrandom's `js` feature is what lets ark-std seed an RNG in a browser. The
+# feature is target-gated inside getrandom, so it is inert on native builds —
+# but it is only ever needed by the wasm build, so it is declared there.
 wasm-bindgen = { version = "0.2", optional = true }
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.2", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
+
+[dev-dependencies]
+# For the chain's vk_hash, which is blake2_256 over the packed verifying key.
+blake2 = "0.10"
 
 [features]
 default = []
-wasm = ["wasm-bindgen", "console_error_panic_hook"]
+wasm = ["wasm-bindgen", "console_error_panic_hook", "getrandom/js", "dep:getrandom"]
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
+
+# The vendored ark-circom code uses arkworks' cfg_iter! macros, which expand to
+# `#[cfg(feature = "parallel")]` against THIS crate's feature set rather than
+# ark-std's. Parallelism still comes from ark-groth16's own `parallel` feature —
+# rayon is in the tree — so the warning is about a feature we deliberately do not
+# declare, not about lost parallelism.
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("parallel"))'] }
