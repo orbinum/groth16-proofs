@@ -1,0 +1,18 @@
+# cargo-audit configuration.
+#
+# The ignore list is for advisories that are real but not reachable from this
+# crate, and that cannot be resolved by updating. Each entry says why, and each
+# should be removed the moment upstream moves.
+
+[advisories]
+ignore = [
+    # tracing-subscriber 0.2.25 — ANSI escape sequences in logged user input.
+    #
+    # Reached through ark-relations 0.5.1, which pins the 0.2 line; the fix is in
+    # 0.3.20, so `cargo update` cannot resolve it. Not reachable here: this crate
+    # calls no tracing API and never installs a subscriber — `grep -r tracing src/`
+    # finds nothing outside the vendored copy, which does not use it either.
+    #
+    # Remove when ark-relations moves to tracing-subscriber 0.3.
+    "RUSTSEC-2025-0055",
+]

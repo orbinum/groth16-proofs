@@ -28,9 +28,18 @@ const root = resolve(process.argv[2] ?? '../circuits');
 const require = createRequire(join(root, 'package.json'));
 const snarkjs = require('snarkjs');
 
-/** Public-signal counts, which the fixture format carries alongside the witness. */
+/**
+ * Every circuit, and the public-signal count the JSON fixture format carries.
+ *
+ * Two formats, because the two suites read different ones: the Rust tests parse
+ * `.witness.json` (only value_proof and unshield are referenced), and the e2e
+ * scripts read the binary `.wtns` for all three — `cross_verify.rs` needs the
+ * binary for every circuit and fails outright when one is missing, which is how
+ * this gap surfaced.
+ */
 const NEEDED = [
   { name: 'value_proof', publicSignals: 4 },
+  { name: 'transfer', publicSignals: 7 },
   { name: 'unshield', publicSignals: 7 },
 ];
 
@@ -38,8 +47,9 @@ const fixtures = join(root, 'fixtures');
 mkdirSync(fixtures, { recursive: true });
 
 for (const { name, publicSignals } of NEEDED) {
-  const out = join(fixtures, `${name}.witness.json`);
-  if (existsSync(out)) {
+  const asJson = join(fixtures, `${name}.witness.json`);
+  const asBinary = join(fixtures, `${name}.wtns`);
+  if (existsSync(asJson) && existsSync(asBinary)) {
     console.log(`  ${name}: already present`);
     continue;
   }
@@ -52,12 +62,16 @@ for (const { name, publicSignals } of NEEDED) {
 
   const witness = { type: 'mem' };
   await snarkjs.wtns.calculate(JSON.parse(readFileSync(input, 'utf8')), readFileSync(wasm), witness);
-  const elements = await snarkjs.wtns.exportJson(witness);
 
+  // The binary form, exactly as snarkjs computed it.
+  writeFileSync(asBinary, Buffer.from(witness.data));
+
+  const elements = await snarkjs.wtns.exportJson(witness);
   writeFileSync(
-    out,
+    asJson,
     `${JSON.stringify({ num_public_signals: publicSignals, witness: elements.map(String) })}\n`,
   );
+
   console.log(`  ${name}: ${elements.length} elements`);
 }
 
