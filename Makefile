@@ -1,160 +1,155 @@
-.PHONY: help fmt check test build build-wasm clean lint all install-tools
+# groth16-proofs — development commands. `make` on its own lists them.
+#
+# Two things here are load-bearing rather than convenience:
+#
+#   * `test` never passes `--lib`. That flag skips tests/, which holds every
+#     test that proves and then verifies — and a suite that ran only the unit
+#     tests is how a prover producing unverifiable proofs passed CI for two
+#     major versions.
+#
+#   * `test-strict` sets GROTH16_REQUIRE_ARTIFACTS. Integration tests skip
+#     themselves when ../circuits is absent, so a suite that skips everything
+#     looks exactly like one that passes everything. That variable turns
+#     absence into a failure, which is what CI runs.
 
-# Default target
 .DEFAULT_GOAL := help
 
-# Colors for output
-BLUE := \033[0;34m
+BLUE  := \033[0;34m
 GREEN := \033[0;32m
-YELLOW := \033[1;33m
-NC := \033[0m # No Color
+DIM   := \033[2m
+NC    := \033[0m
 
-help: ## Show this help message
-	@echo "$(BLUE)groth16-proofs - Development Commands$(NC)"
-	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
-	@echo ""
-	@echo "$(YELLOW)Common workflows:$(NC)"
-	@echo "  make all       - Run all checks (fmt, lint, test)"
-	@echo "  make build     - Build native + WASM"
-	@echo "  make dev       - Quick dev cycle (fmt, check, test)"
+# Where the integration tests look for proving keys and fixtures.
+CIRCUITS ?= ../circuits
 
-# Format code
-fmt: ## Format code with rustfmt
-	@echo "$(BLUE)Formatting code...$(NC)"
+CARGO_FEATURES := --all-features
+
+.PHONY: help
+help: ## List available commands
+	@echo "$(BLUE)groth16-proofs$(NC)"
+	@echo ""
+	@grep -hE '^[a-z][a-z0-9-]*:.*?## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-14s$(NC) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(DIM)  dev            fmt → lint → test$(NC)"
+	@echo "$(DIM)  test-publish   everything that must pass before releasing$(NC)"
+
+# ─── Checks ──────────────────────────────────────────────────────────────────
+
+.PHONY: fmt
+fmt: ## Format with rustfmt
 	cargo fmt --all
 
-# Check formatting without changes
-fmt-check: ## Check formatting (dry-run)
-	@echo "$(BLUE)Checking formatting...$(NC)"
+.PHONY: fmt-check
+fmt-check: ## Check formatting without writing
 	cargo fmt --all -- --check
 
-# Clippy linting
-lint: ## Run clippy linter
-	@echo "$(BLUE)Running clippy...$(NC)"
-	cargo clippy --all-targets --all-features -- -D warnings
+.PHONY: lint
+lint: ## Run clippy, warnings as errors
+	cargo clippy --all-targets $(CARGO_FEATURES) -- -D warnings
 
-# Run tests
-test: ## Run all tests
-	@echo "$(BLUE)Running tests...$(NC)"
-	cargo test --lib --all-features
+.PHONY: check
+check: fmt-check lint test build ## Formatting + clippy
 
-test-all: ## Run all tests including doc tests
-	@echo "$(BLUE)Running all tests (including docs)...$(NC)"
-	cargo test --all-features
+# ─── Tests ───────────────────────────────────────────────────────────────────
 
-test-release: ## Run tests in release mode
-	@echo "$(BLUE)Running tests (release mode)...$(NC)"
-	cargo test --lib --release --all-features
+.PHONY: test
+test: ## Unit + integration tests
+	cargo test $(CARGO_FEATURES)
 
-# Check (fmt + clippy)
-check: fmt-check lint ## Check code quality (fmt + clippy)
-	@echo "$(GREEN)✓ Code quality checks passed$(NC)"
+.PHONY: test-lib
+test-lib: ## Unit tests only — fast, but no prove/verify coverage
+	cargo test --lib $(CARGO_FEATURES)
 
-# Build native binary
-build: ## Build native binary (release)
-	@echo "$(BLUE)Building native binaries...$(NC)"
+.PHONY: test-release
+test-release: ## All tests in release mode (proving is impractically slow in debug)
+	cargo test --release $(CARGO_FEATURES)
+
+.PHONY: test-strict
+test-strict: ## All tests, failing if circuit artifacts are missing
+	GROTH16_REQUIRE_ARTIFACTS=1 cargo test --release $(CARGO_FEATURES)
+
+.PHONY: e2e
+e2e: build build-wasm ## End-to-end: the shipped artifacts, cross-verified
+	@node tests/e2e/wasm-all-circuits.mjs
+	@node tests/e2e/full-chain.mjs
+	@node tests/e2e/negative.mjs
+	@node tests/e2e/proof-generator.mjs
+
+.PHONY: test-publish
+test-publish: test-release e2e ## Full pre-publish verification
+	@echo "$(GREEN)✓ ready to publish$(NC)"
+
+# ─── Builds ──────────────────────────────────────────────────────────────────
+
+.PHONY: build
+build: ## Build the four binaries (release)
 	cargo build --release
-	@echo "$(GREEN)✓ generate-proof-from-witness: ./target/release/generate-proof-from-witness$(NC)"
-	@echo "$(GREEN)✓ convert-vk:                  ./target/release/convert-vk$(NC)"
+	@echo "$(GREEN)✓$(NC) target/release/{pack-proving-key,pack-verifying-key,verify-proof,bench-circom}"
 
-build-debug: ## Build native binary (debug)
-	@echo "$(BLUE)Building native binary (debug)...$(NC)"
+.PHONY: build-debug
+build-debug: ## Build the binaries (debug)
 	cargo build
 
-# Build WASM module
-build-wasm: ## Build WASM module (release)
-	@echo "$(BLUE)Building WASM module...$(NC)"
-	@command -v wasm-pack >/dev/null 2>&1 || { echo "$(YELLOW)Installing wasm-pack...$(NC)"; curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh; }
+# The npm package.json is rendered from a template so its version cannot drift
+# from Cargo.toml — one source of truth, checked by parsing the result.
+define package-wasm
+@node -e "\
+	const fs = require('fs');\
+	const v = fs.readFileSync('Cargo.toml', 'utf8').match(/^version\s*=\s*\"(.+)\"/m);\
+	if (!v) throw new Error('no version in Cargo.toml');\
+	const out = fs.readFileSync('npm/package.json.template', 'utf8').replace(/__VERSION__/g, v[1]);\
+	JSON.parse(out);\
+	fs.writeFileSync('pkg/package.json', out);\
+"
+@cp npm/README.md pkg/README.md
+@echo "$(GREEN)✓$(NC) pkg/ — @orbinum/groth16-proofs"
+endef
+
+.PHONY: build-wasm
+build-wasm: ## Build the wasm package (release)
+	@command -v wasm-pack >/dev/null || { echo "wasm-pack not found — run 'make install-tools'"; exit 1; }
 	wasm-pack build --target web --out-dir ./pkg --release --features wasm
-	@echo "$(BLUE)Configuring npm package...$(NC)"
-	@cd pkg && node -e "\
-		const fs = require('fs');\
-		const cargoToml = fs.readFileSync('../Cargo.toml', 'utf8');\
-		const versionMatch = cargoToml.match(/^version\s*=\s*\"(.+)\"/m);\
-		if (!versionMatch) throw new Error('Could not extract version from Cargo.toml');\
-		const template = fs.readFileSync('../npm/package.json.template', 'utf8');\
-		const rendered = template.replace(/__VERSION__/g, versionMatch[1]);\
-		JSON.parse(rendered);\
-		fs.writeFileSync('package.json', rendered);\
-	"
-	@cp npm/README.md pkg/README.md
-	@echo "$(GREEN)✓ WASM: ./pkg/@orbinum/groth16-proofs$(NC)"
+	$(package-wasm)
 
-build-wasm-dev: ## Build WASM module (dev/unoptimized)
-	@echo "$(BLUE)Building WASM module (dev)...$(NC)"
-	@command -v wasm-pack >/dev/null 2>&1 || { echo "$(YELLOW)Installing wasm-pack...$(NC)"; curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh; }
+.PHONY: build-wasm-dev
+build-wasm-dev: ## Build the wasm package (unoptimized)
+	@command -v wasm-pack >/dev/null || { echo "wasm-pack not found — run 'make install-tools'"; exit 1; }
 	wasm-pack build --target web --out-dir ./pkg --dev --features wasm
-	@echo "$(BLUE)Configuring npm package...$(NC)"
-	@cd pkg && node -e "\
-		const fs = require('fs');\
-		const cargoToml = fs.readFileSync('../Cargo.toml', 'utf8');\
-		const versionMatch = cargoToml.match(/^version\s*=\s*\"(.+)\"/m);\
-		if (!versionMatch) throw new Error('Could not extract version from Cargo.toml');\
-		const template = fs.readFileSync('../npm/package.json.template', 'utf8');\
-		const rendered = template.replace(/__VERSION__/g, versionMatch[1]);\
-		JSON.parse(rendered);\
-		fs.writeFileSync('package.json', rendered);\
-	"
-	@cp npm/README.md pkg/README.md
-	@echo "$(GREEN)✓ WASM (dev): ./pkg/@orbinum/groth16-proofs$(NC)"
+	$(package-wasm)
 
-# Build everything
-build-all: build build-wasm ## Build both native and WASM
-	@echo "$(GREEN)✓ All builds complete$(NC)"
+.PHONY: build-all
+build-all: build build-wasm ## Native + wasm
 
-# Clean build artifacts
-clean: ## Clean build artifacts
-	@echo "$(BLUE)Cleaning build artifacts...$(NC)"
-	cargo clean
-	rm -rf pkg/
-	@echo "$(GREEN)✓ Clean complete$(NC)"
+# ─── Workflows ───────────────────────────────────────────────────────────────
 
-# Development workflow
-dev: fmt lint test ## Quick dev cycle (format → lint → test)
-	@echo "$(GREEN)✓ Dev cycle complete$(NC)"
+.PHONY: dev
+dev: fmt lint test ## Format, lint, test
 
-# Full validation (used in CI)
-all: fmt lint test build build-wasm ## Full validation pipeline
-	@echo "$(GREEN)✓ All checks passed$(NC)"
+.PHONY: bench
+bench: build ## Benchmark proving against the unshield fixture
+	@test -f $(CIRCUITS)/keys/unshield_pk.zkey \
+		|| { echo "needs $(CIRCUITS) with built keys"; exit 1; }
+	./target/release/bench-circom unshield \
+		$(CIRCUITS)/fixtures/unshield.witness.json \
+		$(CIRCUITS)/keys/unshield_pk.zkey 3
 
-# Install development tools
-install-tools: ## Install required dev tools
-	@echo "$(BLUE)Installing development tools...$(NC)"
-	rustup component add rustfmt clippy
-	@command -v wasm-pack >/dev/null 2>&1 || curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh
-	@command -v cargo-release >/dev/null 2>&1 || cargo install cargo-release
-	@echo "$(GREEN)✓ Tools installed$(NC)"
+.PHONY: doc
+doc: ## Build and open the API docs
+	cargo doc --no-deps --open
 
-# Run specific examples
-run-example: ## Run example binary (usage: make run-example)
-	@echo "$(BLUE)Ensure witness.json and proving_key.ark are in current directory$(NC)"
-	./target/release/generate-proof-from-witness witness.json proving_key.ark
-
-# Check dependencies
-deps: ## List project dependencies
-	@echo "$(BLUE)Cargo dependencies:$(NC)"
-	cargo tree
-
-# Security audit
-audit: ## Run security audit
-	@echo "$(BLUE)Running security audit...$(NC)"
-	@command -v cargo-audit >/dev/null 2>&1 || { echo "$(YELLOW)Installing cargo-audit...$(NC)"; cargo install cargo-audit; }
+.PHONY: audit
+audit: ## Check dependencies for advisories
+	@command -v cargo-audit >/dev/null || cargo install cargo-audit --locked
 	cargo audit
 
-# Update dependencies
-update: ## Update dependencies
-	@echo "$(BLUE)Updating dependencies...$(NC)"
-	cargo update
+.PHONY: clean
+clean: ## Remove build artifacts
+	cargo clean
+	rm -rf pkg/
 
-# Version information
-version: ## Show version and toolchain info
-	@echo "$(BLUE)Rust Toolchain:$(NC)"
-	@rustc --version
-	@cargo --version
-	@rustup show active-toolchain
-
-# Documentation
-doc: ## Generate and open documentation
-	@echo "$(BLUE)Generating documentation...$(NC)"
-	cargo doc --no-deps --open
+.PHONY: install-tools
+install-tools: ## Install rustfmt, clippy and wasm-pack
+	rustup component add rustfmt clippy
+	@command -v wasm-pack >/dev/null \
+		|| curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh
