@@ -69,7 +69,7 @@ jobs:
           # e2e suite exists to catch. One package is cheaper than cloning the
           # circuits repository and its toolchain.
           npm install --no-save --prefix ../circuits snarkjs@0.7.6
-          for c in value_proof unshield; do
+          for c in value_proof transfer unshield; do
             curl -sSfL -o "../circuits/fixtures/$c.input.json" \
               "https://raw.githubusercontent.com/orbinum/circuits/main/fixtures/$c.input.json"
           done
@@ -155,7 +155,7 @@ jobs:
           # e2e suite exists to catch. One package is cheaper than cloning the
           # circuits repository and its toolchain.
           npm install --no-save --prefix ../circuits snarkjs@0.7.6
-          for c in value_proof unshield; do
+          for c in value_proof transfer unshield; do
             curl -sSfL -o "../circuits/fixtures/$c.input.json" \
               "https://raw.githubusercontent.com/orbinum/circuits/main/fixtures/$c.input.json"
           done
