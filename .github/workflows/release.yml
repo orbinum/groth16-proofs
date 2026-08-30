@@ -1,126 +1,182 @@
 name: Release
 
 on:
-    push:
-        branches: [main]
-        paths:
-            - "Cargo.toml"
-            - "src/**"
-            - "npm/**"
-            - ".github/workflows/release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "src/**"
+      - "npm/**"
+      - ".github/workflows/release.yml"
 
 permissions:
-    contents: write
+  contents: write
+
+env:
+  # The circuits release the test suite proves against. 0.14.0 is the first
+  # with .ark v2 artifacts in its manifest; earlier ones ship v1 keys that this
+  # crate rejects by name.
+  CIRCUITS_VERSION: "0.14.0"
 
 jobs:
-    release:
-        name: Build, Release, and Publish
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
+  release:
+    name: Build, Release, and Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-            - uses: dtolnay/rust-toolchain@stable
-              with:
-                  targets: wasm32-unknown-unknown
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
-            - uses: Swatinem/rust-cache@v2
-              with:
-                  cache-directories: target
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: target
 
-            - name: Install wasm-pack
-              run: cargo install wasm-pack
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
 
-            - name: Extract version from Cargo.toml
-              id: version
-              run: |
-                  VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-                  echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-                  echo "📦 Version: $VERSION"
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
 
-            - name: Check if tag already exists
-              id: check_tag
-              run: |
-                  if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-                    echo "exists=true" >> $GITHUB_OUTPUT
-                    echo "⚠️  Tag v${{ steps.version.outputs.version }} already exists"
-                  else
-                    echo "exists=false" >> $GITHUB_OUTPUT
-                    echo "✅ Tag v${{ steps.version.outputs.version }} does not exist, proceeding"
-                  fi
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Tag v${{ steps.version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Tag v${{ steps.version.outputs.version }} does not exist, proceeding"
+          fi
 
-            - name: Configure git for tagging
-              if: steps.check_tag.outputs.exists == 'false'
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Configure git for tagging
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            - name: Create and push tag
-              if: steps.check_tag.outputs.exists == 'false'
-              run: |
-                  git tag v${{ steps.version.outputs.version }}
-                  git push origin v${{ steps.version.outputs.version }}
+      - name: Build WASM for release
+        if: steps.check_tag.outputs.exists == 'false'
+        run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
 
-            - name: Build WASM for release
-              if: steps.check_tag.outputs.exists == 'false'
-              run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
+      - name: Configure npm package.json
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          cd pkg
+          # Generate package.json from template (same approach as circuits)
+          node -e "
+          const fs = require('fs');
+          const template = fs.readFileSync('../npm/package.json.template', 'utf8');
+          const rendered = template.replace(/__VERSION__/g, '${{ steps.version.outputs.version }}');
+          JSON.parse(rendered);
+          fs.writeFileSync('package.json', rendered);
+          "
+          # Copiar README específico para npm
+          cp ../npm/README.md ./README.md
+          echo "📦 Configured package.json:"
+          cat package.json
 
-            - name: Configure npm package.json
-              if: steps.check_tag.outputs.exists == 'false'
-              run: |
-                  cd pkg
-                  # Generate package.json from template (same approach as circuits)
-                  node -e "
-                  const fs = require('fs');
-                  const template = fs.readFileSync('../npm/package.json.template', 'utf8');
-                  const rendered = template.replace(/__VERSION__/g, '${{ steps.version.outputs.version }}');
-                  JSON.parse(rendered);
-                  fs.writeFileSync('package.json', rendered);
-                  "
-                  # Copiar README específico para npm
-                  cp ../npm/README.md ./README.md
-                  echo "📦 Configured package.json:"
-                  cat package.json
+      - name: Create WASM package artifact
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          cd pkg
+          tar -czf ../orb-groth16-proof.tar.gz .
+          cd ..
+          ls -lh orb-groth16-proof.tar.gz
 
-            - name: Create WASM package artifact
-              if: steps.check_tag.outputs.exists == 'false'
-              run: |
-                  cd pkg
-                  tar -czf ../orb-groth16-proof.tar.gz .
-                  cd ..
-                  ls -lh orb-groth16-proof.tar.gz
+      # The gate. Everything below this point is irreversible: a crates.io version
+      # can never be republished, and a git tag is what the whole job keys off. This
+      # workflow used to go from wasm-pack straight to `cargo publish` without
+      # running a single test.
+      #
+      # GROTH16_REQUIRE_ARTIFACTS turns a missing sibling checkout into a failure
+      # rather than a skip — without it the security and cross-verification suites
+      # return early and the run is green having proved nothing.
+      - name: Fetch the published circuits
+        run: |
+          set -euo pipefail
+          npm pack "@orbinum/circuits@${{ env.CIRCUITS_VERSION }}"
+          mkdir -p ../circuits
+          tar xzf "orbinum-circuits-${{ env.CIRCUITS_VERSION }}.tgz"
+          cp -r package/* ../circuits/
+          rm -rf package "orbinum-circuits-${{ env.CIRCUITS_VERSION }}.tgz"
 
-            - name: Create GitHub Release and Tag
-              if: steps.check_tag.outputs.exists == 'false'
-              uses: softprops/action-gh-release@v1
-              with:
-                  tag_name: ${{ steps.version.outputs.tag }}
-                  name: Release ${{ steps.version.outputs.version }}
-                  files: orb-groth16-proof.tar.gz
-                  draft: false
-                  generate_release_notes: true
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The package ships artifacts, not fixtures — those are derived, and
+          # shipping them would be shipping a cache. The Rust suite needs two of
+          # them, and `assert_artifacts` refuses to let a missing one become a
+          # silent skip, so they are rebuilt here from the wasm just downloaded.
+          #
+          # snarkjs is installed for the same class of reason: `full-chain.mjs`
+          # shells out to it from ../circuits/node_modules, and without it that
+          # script skips while the run still reports OK — which is the failure the
+          # e2e suite exists to catch. One package is cheaper than cloning the
+          # circuits repository and its toolchain.
+          npm install --no-save --prefix ../circuits snarkjs@0.7.6
+          for c in value_proof transfer unshield; do
+            curl -sSfL -o "../circuits/fixtures/$c.input.json" \
+              "https://raw.githubusercontent.com/orbinum/circuits/main/fixtures/$c.input.json"
+          done
+          node .github/scripts/make-fixtures.mjs ../circuits
 
-            - name: Publish to crates.io
-              if: steps.check_tag.outputs.exists == 'false'
-              run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-              env:
-                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Test
+        run: cargo test --release --all-features
+        env:
+          GROTH16_REQUIRE_ARTIFACTS: "1"
 
-            - name: Setup Node.js for npm publish
-              if: steps.check_tag.outputs.exists == 'false'
-              uses: actions/setup-node@v4
-              with:
-                  node-version: '22'
-                  registry-url: 'https://registry.npmjs.org'
+      - name: End-to-end against the built wasm
+        run: |
+          node tests/e2e/wasm-all-circuits.mjs
+          node tests/e2e/full-chain.mjs
+          node tests/e2e/negative.mjs
+        env:
+          # Without this a missing snarkjs or artifact makes every script
+          # print a skip notice and exit 0 — the run reports OK having
+          # proved nothing, which is the failure this suite exists to catch.
+          GROTH16_REQUIRE_ARTIFACTS: "1"
 
-            - name: Publish to npm
-              if: steps.check_tag.outputs.exists == 'false'
-              run: |
-                  cd pkg
-                  npm publish
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create and push tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git tag v${{ steps.version.outputs.version }}
+          git push origin v${{ steps.version.outputs.version }}
+
+      - name: Create GitHub Release and Tag
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.version }}
+          files: orb-groth16-proof.tar.gz
+          draft: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to crates.io
+        if: steps.check_tag.outputs.exists == 'false'
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Setup Node.js for npm publish
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          cd pkg
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

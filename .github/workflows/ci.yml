@@ -4,39 +4,105 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  # The published circuits package the integration tests run against. The
+  # verifying keys — and so the vk_hashes the tests check — are identical to the
+  # working tree's; only the .ark proving keys differ between releases.
+  # 0.14.0 is the first release whose manifest carries .ark v2 entries.
+  # Testing against 0.13.0 meant the artifact path this crate now depends on was
+  # never exercised in CI.
+  CIRCUITS_VERSION: "0.14.0"
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dtolnay/rust-toolchain@stable
-      
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: target
-      
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      # The integration tests need real proving keys, and the published package
+      # already has them — no circom, no trusted setup, just a download. Before
+      # this step existed the tests skipped themselves here and CI was green by
+      # absence, which is indistinguishable from green by passing and is exactly
+      # how a prover producing unverifiable proofs shipped twice.
+      #
+      # Pinned rather than floating: the artifacts are consensus-relevant, and a
+      # silently newer key would change what is being tested. Bump deliberately.
+      - name: Cache circuit artifacts
+        id: circuits-cache
+        uses: actions/cache@v4
+        with:
+          path: ../circuits
+          key: circuits-${{ env.CIRCUITS_VERSION }}
+
+      - name: Fetch circuit artifacts
+        if: steps.circuits-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ../circuits/keys ../circuits/build ../circuits/fixtures
+          npm pack "@orbinum/circuits@${CIRCUITS_VERSION}"
+          tar xzf "orbinum-circuits-${CIRCUITS_VERSION}.tgz"
+          cp package/*_pk.zkey package/*_pk.ark ../circuits/keys/
+          cp package/verification_key_*.json ../circuits/build/
+          cp package/*.wasm ../circuits/build/
+          cp package/manifest.json ../circuits/
+          rm -rf package "orbinum-circuits-${CIRCUITS_VERSION}.tgz"
+
+          # The package ships artifacts, not fixtures — those are derived, and
+          # shipping them would be shipping a cache. The Rust suite needs two of
+          # them, and `assert_artifacts` refuses to let a missing one become a
+          # silent skip, so they are rebuilt here from the wasm just downloaded.
+          #
+          # snarkjs is installed for the same class of reason: `full-chain.mjs`
+          # shells out to it from ../circuits/node_modules, and without it that
+          # script skips while the run still reports OK — which is the failure the
+          # e2e suite exists to catch. One package is cheaper than cloning the
+          # circuits repository and its toolchain.
+          npm install --no-save --prefix ../circuits snarkjs@0.7.6
+          for c in value_proof transfer unshield; do
+            curl -sSfL -o "../circuits/fixtures/$c.input.json" \
+              "https://raw.githubusercontent.com/orbinum/circuits/main/fixtures/$c.input.json"
+          done
+          node .github/scripts/make-fixtures.mjs ../circuits
+
+      # NOT `--lib`: that skips tests/, which holds every test that proves and
+      # then verifies.
+      #
+      # GROTH16_REQUIRE_ARTIFACTS turns the "artifacts absent, skipping" path
+      # into a failure. Without it a broken fetch above would leave every
+      # integration test skipping and the job still green.
       - name: Run tests
-        run: cargo test --lib --all-features
+        run: cargo test --release --all-features
+        env:
+          GROTH16_REQUIRE_ARTIFACTS: "1"
 
   check:
     name: Clippy & Format Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: target
-      
+
       - name: Check formatting
         run: cargo fmt --all -- --check
-      
+
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -45,27 +111,82 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: target
-      
+
       - name: Install wasm-pack
         run: cargo install wasm-pack
-      
+
       - name: Build native release
         run: cargo build --release
-      
+
       - name: Build WASM
         run: wasm-pack build --target web --out-dir ./pkg --release --features wasm
-      
+
+      # The e2e suite is the only thing that exercises the three repositories
+      # together — this crate's wasm, the published circuits, and proof-generator.
+      # It has caught what the Rust tests do not see, and it never ran here.
+      - name: Fetch circuit artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p ../circuits/keys ../circuits/build ../circuits/fixtures
+          npm pack "@orbinum/circuits@${{ env.CIRCUITS_VERSION }}"
+          tar xzf "orbinum-circuits-${{ env.CIRCUITS_VERSION }}.tgz"
+          cp package/*_pk.zkey package/*_pk.ark ../circuits/keys/
+          cp package/verification_key_*.json ../circuits/build/
+          cp package/*.wasm ../circuits/build/
+          cp package/manifest.json ../circuits/
+          rm -rf package "orbinum-circuits-${{ env.CIRCUITS_VERSION }}.tgz"
+
+          # The package ships artifacts, not fixtures — those are derived, and
+          # shipping them would be shipping a cache. The Rust suite needs two of
+          # them, and `assert_artifacts` refuses to let a missing one become a
+          # silent skip, so they are rebuilt here from the wasm just downloaded.
+          #
+          # snarkjs is installed for the same class of reason: `full-chain.mjs`
+          # shells out to it from ../circuits/node_modules, and without it that
+          # script skips while the run still reports OK — which is the failure the
+          # e2e suite exists to catch. One package is cheaper than cloning the
+          # circuits repository and its toolchain.
+          npm install --no-save --prefix ../circuits snarkjs@0.7.6
+          for c in value_proof transfer unshield; do
+            curl -sSfL -o "../circuits/fixtures/$c.input.json" \
+              "https://raw.githubusercontent.com/orbinum/circuits/main/fixtures/$c.input.json"
+          done
+          node .github/scripts/make-fixtures.mjs ../circuits
+
+      - name: End-to-end
+        run: |
+          node tests/e2e/wasm-all-circuits.mjs
+          node tests/e2e/full-chain.mjs
+          node tests/e2e/negative.mjs
+        env:
+          # Without this a missing snarkjs or artifact makes every script
+          # print a skip notice and exit 0 — the run reports OK having
+          # proved nothing, which is the failure this suite exists to catch.
+          GROTH16_REQUIRE_ARTIFACTS: "1"
+
       - name: Archive WASM package
         uses: actions/upload-artifact@v4
         with:
           name: wasm-pkg
           path: pkg/
           retention-days: 7
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit dependencies
+        run: cargo audit
