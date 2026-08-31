@@ -188,3 +188,16 @@ jobs:
           npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # `cargo publish` leaves the packaged crate extracted under
+      # target/package/, tests directory and all. The cache action then walks
+      # every tests/ looking for `target` and `trybuild` subdirectories to
+      # exclude, finds neither in a freshly unpacked tarball, and logs an ENOENT
+      # per miss. Harmless — the cache still saved — but it puts red text at the
+      # end of a green release, which is how a real failure gets ignored later.
+      #
+      # Not conditional on the tag check: if a publish half-succeeded the
+      # directory is still there, and cleaning it is always right.
+      - name: Remove the packaged crate before the cache is saved
+        if: always()
+        run: rm -rf target/package
