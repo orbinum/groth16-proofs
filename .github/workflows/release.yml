@@ -103,10 +103,18 @@ jobs:
       - name: Fetch the published circuits
         run: |
           set -euo pipefail
+          # Same layout as the CI workflow, and the same layout a circuits
+          # checkout has: the tests resolve keys/, build/ and fixtures/ by path.
+          # Copying the package flat into ../circuits looks equivalent and is not
+          # — the wasm lands beside the manifest instead of under build/, and
+          # curl -o cannot create the fixtures/ directory it writes into.
+          mkdir -p ../circuits/keys ../circuits/build ../circuits/fixtures
           npm pack "@orbinum/circuits@${{ env.CIRCUITS_VERSION }}"
-          mkdir -p ../circuits
           tar xzf "orbinum-circuits-${{ env.CIRCUITS_VERSION }}.tgz"
-          cp -r package/* ../circuits/
+          cp package/*_pk.zkey package/*_pk.ark ../circuits/keys/
+          cp package/verification_key_*.json ../circuits/build/
+          cp package/*.wasm ../circuits/build/
+          cp package/manifest.json ../circuits/
           rm -rf package "orbinum-circuits-${{ env.CIRCUITS_VERSION }}.tgz"
 
           # The package ships artifacts, not fixtures — those are derived, and
