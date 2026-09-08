@@ -88,6 +88,12 @@ mod vendor;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
+// The C surface, for the mobile provers. Behind a feature for the same reason
+// `wasm` is: a desktop build has no use for it, and `cdylib` symbols it never
+// calls are still symbols it links.
+#[cfg(feature = "ffi")]
+pub mod ffi;
+
 pub use core::error::ProofError;
 
 // Proving and verifying
@@ -114,3 +120,10 @@ pub use core::field::{
 // WASM
 #[cfg(feature = "wasm")]
 pub use wasm::{compress_snarkjs_proof_wasm, generate_proof_wasm, init_panic_hook};
+
+// C FFI
+#[cfg(feature = "ffi")]
+pub use ffi::{
+    orb_abi_version, orb_buffer_free, orb_prove, orb_prover_free, orb_prover_new, OrbBuffer,
+    OrbProver, OrbStatus,
+};
