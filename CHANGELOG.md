@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0](https://github.com/orbinum/groth16-proofs/releases/tag/v4.1.0) - 2026-09-08
+
+### Added
+
+- **A C surface, behind the `ffi` feature.** Five functions —
+  `orb_prover_new`, `orb_prove`, `orb_prover_free`, `orb_buffer_free` and
+  `orb_abi_version` — plus `include/orbinum_prover.h`. Nothing changes for
+  existing callers: the module is `#[cfg(feature = "ffi")]`, so a default build
+  links none of it, for the same reason `wasm` is gated. This is what the iOS
+  and Android provers call (ADR-001).
+
+  The handle is the point. `orb_prover_new` parses a `.ark` artifact once —
+  roughly half a second on a desktop, more on a phone — and `orb_prove` reuses
+  it, so a host that builds a handle per spend pays that parse every time for
+  nothing.
+
+  Errors are a status, never a panic across the boundary: a bad artifact, a
+  misaligned witness and an internal failure are three separate values, because
+  a host has to tell "your file is wrong" from "your input is wrong". Both free
+  functions accept null, so a `finally` can call them unconditionally.
+
+  SECURITY: the witness contains the spending key. The library zeroes its own
+  copy; it cannot zero the caller's, and the header says so where a host
+  developer will read it.
+
+- **`bench-ffi`**, the existing benchmark run through the C surface rather than
+  through Rust — what a phone actually pays. Measured on quiet machines:
+  unshield proving 132 ms on an M4 host, 134 ms in the iOS simulator, 308 ms in
+  the Android emulator.
+
+- **A C host that exercises the published header** (`examples/c/host.c`), with
+  `examples/dump_witness.rs` and `examples/verify_ffi_proof.rs` to feed and
+  check it. `tests/ffi.rs` calls the surface from Rust, where the header does
+  not exist — so it could not catch a hand-written header drifting from
+  `src/ffi/mod.rs`. The host compiles with `-Wall -Wextra -Werror` against the
+  header alone, links the `cdylib`, proves, and the proof it produces is then
+  verified: bytes that crossed the real C boundary satisfy the verifier.
+
 ## [4.0.0](https://github.com/orbinum/groth16-proofs/releases/tag/v4.0.0) - 2026-08-27
 
 There is no 3.1.0. This release was prepared under that number and became a major

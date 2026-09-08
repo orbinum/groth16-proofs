@@ -1,6 +1,6 @@
 [package]
 name = "groth16-proofs"
-version = "4.0.0"
+version = "4.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "High-performance Groth16 proof generator using arkworks for Orbinum privacy protocol"
@@ -35,6 +35,13 @@ path = "src/bin/pack_proving_key.rs"
 [[bin]]
 name = "bench-circom"
 path = "src/bin/bench_circom.rs"
+
+# The same benchmark through the C surface — what a phone calls. Behind the
+# `ffi` feature because that is where the surface lives.
+[[bin]]
+name = "bench-ffi"
+path = "src/bin/bench_ffi.rs"
+required-features = ["ffi"]
 
 [dependencies]
 # Arkworks dependencies
@@ -78,6 +85,8 @@ blake2 = "0.10"
 [features]
 default = []
 wasm = ["wasm-bindgen", "console_error_panic_hook", "getrandom/js", "dep:getrandom"]
+# The C surface. No extra dependencies — it is std plus what the crate already has.
+ffi = []
 
 [profile.release]
 opt-level = 3
