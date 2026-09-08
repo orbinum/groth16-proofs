@@ -10,14 +10,20 @@ use std::{fs::File, io::BufReader};
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let zkey = args.next().expect("usage: verify_ffi_proof <zkey> <proof.bin> <signals.bin>");
+    let zkey = args
+        .next()
+        .expect("usage: verify_ffi_proof <zkey> <proof.bin> <signals.bin>");
     let proof_path = args.next().expect("proof");
     let signals_path = args.next().expect("signals");
 
     let proof = std::fs::read(&proof_path).expect("proof bytes");
     let signal_bytes = std::fs::read(&signals_path).expect("signal bytes");
     assert_eq!(proof.len(), 128, "a compressed Groth16 proof is 128 bytes");
-    assert_eq!(signal_bytes.len() % 32, 0, "signals are 32-byte little-endian values");
+    assert_eq!(
+        signal_bytes.len() % 32,
+        0,
+        "signals are 32-byte little-endian values"
+    );
 
     let signals: Vec<Bn254Fr> = signal_bytes
         .chunks_exact(32)
